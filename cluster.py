@@ -79,7 +79,7 @@ class KmeansSearch():
             clusters = k_means.cluster_centers_
                 
             # write the clusters to a csv file
-            output_file = 'face_clusters_' + str(k) + '.csv'
+            output_file = 'output/face_clusters_' + str(k) + '.csv'
             s.write_clusters(output_file, features, clusters)
             subtitle = 'sil score: ' + '{0:.3f}'.format(sil_score)
             s.plot_cluster_and_data(features, X,[clusters], subtitle)  
@@ -141,24 +141,26 @@ class KmeansSearch():
         plt.tight_layout()      
         #plt.show()
         if(len(cluster_list) == 1):
-            plt.savefig('clusters_' + str(k) + '.png')
+            plt.savefig('output/clusters_' + str(k) + '.png')
         else:
             k_start = cluster_list[0].shape[0]
             k_end = cluster_list[-1].shape[0]
-            plt.savefig('clusters_' + str(k_start) + 'to' + str(k_end) + '.png')
+            plt.savefig('output/clusters_' + str(k_start) + 'to' + str(k_end) + '.png')
             
 
     def write_k_search(s, k_range, sil_scores, ch_scores):
         df_scores= pd.DataFrame.from_items([('sil score', sil_scores),\
                                             ('CH score', ch_scores)])
         df_scores.index = k_range
-        df_scores.to_csv('scores.csv',index_label='k')
+        df_scores.to_csv('output/scores.csv',index_label='k')
             
 #------------------------------------------------------------------------
 def do_all(args):
     kmeans_search = KmeansSearch(args.i)    
     
     features=[' AU06_r',' AU12_r']
+    if not os.path.isdir('output'):
+        os.mkdir('output')
     sil_score, ch_score = kmeans_search.cluster(range(2,5),features)
     
 #------------------------------------------------------------------------
@@ -177,3 +179,4 @@ if __name__ == '__main__':
 
     do_all(args)
     logging.info('PROGRAM COMPLETE')
+
