@@ -11,7 +11,7 @@
     scores.csv 
 
   example:
-      $ python -i 'example/all_frames.csv'
+      $ python -i 'example/test.csv'
 ------------------------------------------------------------------------
 """
 import csv
@@ -22,6 +22,7 @@ import math
 #import compare
 from sklearn import cluster
 from sklearn.metrics import silhouette_score
+from sklearn.metrics import calinski_harabaz_score
 from sklearn.manifold import TSNE
 from sklearn.model_selection import train_test_split
 
@@ -49,34 +50,49 @@ class KmeansSearch():
         s.df = pd.read_csv(infile) 
         
     #-------------------------------------------
-    def cluster(s, k, features):
+    def cluster(s, k_range, features):
         """ runs kmeans, saves cluster file, saves plot file
             returns silhoutte and Calinski scores 
         """
         logging.info('starting cluster search' )
-        logging.info('\tk=' + str(k) )
         logging.info('\tfeatures=' + str(features))
 
+        cluster_list = []
+        sil_scores = []
+        ch_scores = []
         X = s.df.loc[:,features].dropna().values
         logging.info('\tX.shape' + str(X.shape))
-        
-        k_means = cluster.KMeans(n_clusters=k)
-        k_means.fit(X)
-        y = k_means.predict(X)
-        
-        sil_score = s.calc_sil_score(X,y)
-        logging.info('silhouette score with ' + str(k) + ' clusters: ' + \
-                     str(sil_score))
-        
-        clusters = k_means.cluster_centers_
+        for k in k_range:
+            logging.info('\tk=' + str(k) )
+    
             
-        # write the clusters to a csv file
-        output_file = 'face_clusters_' + str(k) + '.csv'
-        s.write_clusters(output_file, features, clusters)
-        subtitle = 'sil score: ' + '{0:.3f}'.format(sil_score)
-        s.plot_cluster_and_data(features, X,[clusters], subtitle)  
+            k_means = cluster.KMeans(n_clusters=k, max_iter=1000, n_jobs=1)
+            k_means.fit(X)
+            y = k_means.predict(X)
+            
+            sil_score = s.calc_sil_score(X,y)
+            ch_score = calinski_harabaz_score(X,y)
+            
+            logging.info('silhouette score with ' + str(k) + ' clusters: ' + \
+                             '{0:.3f}'.format(sil_score))
+            logging.info('CH score with ' + str(k) + ' clusters: ' + \
+                             '{0:.3f}'.format(ch_score))
+            
+            clusters = k_means.cluster_centers_
+                
+            # write the clusters to a csv file
+            output_file = 'face_clusters_' + str(k) + '.csv'
+            s.write_clusters(output_file, features, clusters)
+            subtitle = 'sil score: ' + '{0:.3f}'.format(sil_score)
+            s.plot_cluster_and_data(features, X,[clusters], subtitle)  
 
-        return sil_score
+            cluster_list.append(clusters)
+            sil_scores.append(sil_score)
+            ch_scores.append(ch_score)
+        s.plot_cluster_and_data(features, X, cluster_list)
+        s.write_k_search(k_range, sil_scores, ch_scores)
+        
+        return sil_scores, ch_scores
     
     #-------------------------------------------
     def write_clusters(s, outfile, features, clusters):
@@ -110,7 +126,7 @@ class KmeansSearch():
     def plot_cluster_and_data(s, header, data, cluster_list,  subtitle=None):
         num_clusters = len(cluster_list)
         num_col = math.ceil(num_clusters/2)
-        num_row = int(num_clusters/num_col)
+        num_row = math.ceil(num_clusters/num_col)
         plt.figure(figsize=(8,8))
         
         for i,clusters in enumerate(cluster_list):
@@ -126,15 +142,26 @@ class KmeansSearch():
             plt.title(myTitle)
         plt.tight_layout()      
         #plt.show()
-        plt.savefig('clusters_' + str(k) + '.png')
+        if(len(cluster_list) == 1):
+            plt.savefig('clusters_' + str(k) + '.png')
+        else:
+            k_start = cluster_list[0].shape[0]
+            k_end = cluster_list[-1].shape[0]
+            plt.savefig('clusters_' + str(k_start) + 'to' + str(k_end) + '.png')
+            
 
-    
+    def write_k_search(s, k_range, sil_scores, ch_scores):
+        df_scores= pd.DataFrame.from_items([('sil score', sil_scores),\
+                                            ('CH score', ch_scores)])
+        df_scores.index = k_range
+        df_scores.to_csv('scores.csv',index_label='k')
+            
 #------------------------------------------------------------------------
 def do_all(args):
     kmeans_search = KmeansSearch(args.i)    
     
     features=[' AU06_r',' AU12_r']
-    sil_score = kmeans_search.cluster(4,features)
+    sil_score, ch_score = kmeans_search.cluster(range(2,5),features)
     
 #------------------------------------------------------------------------
 if __name__ == '__main__':
