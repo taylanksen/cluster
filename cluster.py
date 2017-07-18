@@ -35,12 +35,12 @@ import argparse
 import logging
 
 from collections import defaultdict
+from itertools import combinations
 
 logging.basicConfig(level=logging.DEBUG)
-'''
-If you want to set the logging level from a command-line option such as:
-  --log=INFO
-'''
+# you can set the logging level from a command-line option such as:
+#   --log=INFO
+
 
 #-------------------------------------------------------------------------------
 class KmeansSearch():
@@ -49,8 +49,21 @@ class KmeansSearch():
     def __init__(s, infile):
         s.df = pd.read_csv(infile) 
         
+        
     #-------------------------------------------
-    def cluster(s, k_range, features):
+    def feature_search(s, features, max_dim=2):
+        """ runs k_search for all permutations of features
+        """
+        k_range = range(2,4)
+        
+        for num_features in range(1, max_dim+1):
+            feature_combo_list = list(combinations(features,num_features))        
+            for feature_subset in feature_combo_list:
+                s.k_search(k_range, feature_subset)
+                
+                
+    #-------------------------------------------
+    def k_search(s, k_range, features):
         """ runs kmeans, saves cluster file, saves plot file
             returns silhoutte and Calinski scores 
         """
@@ -79,16 +92,18 @@ class KmeansSearch():
             clusters = k_means.cluster_centers_
                 
             # write the clusters to a csv file
-            output_file = 'output/face_clusters_' + str(k) + '.csv'
+            output_file = 'output/face_clusters_' + \
+                '_'.join(features).replace(' ','') + '_' + str(k) + '.csv'
             s.write_clusters(output_file, features, clusters)
-            subtitle = 'sil score: ' + '{0:.3f}'.format(sil_score)
-            s.plot_cluster_and_data(features, X,[clusters], subtitle)  
+            subtitle = 'sil score: ' + '{:.3f}'.format(sil_score)
+            subtitle += ', CH score: ' + '{:.2E}'.format(ch_score)
+            s.write_plots(features, X,[clusters], subtitle)  
 
             cluster_list.append(clusters)
             sil_scores.append(sil_score)
             ch_scores.append(ch_score)
-            s.plot_cluster_and_data(features, X, cluster_list)
-            s.write_k_search(k_range, sil_scores, ch_scores)
+            s.write_plots(features, X, cluster_list)
+            s.write_scores(features, k_range, sil_scores, ch_scores)
         
         return sil_scores, ch_scores
     
@@ -121,7 +136,7 @@ class KmeansSearch():
         return sil_score_avg
         
     #-------------------------------------------
-    def plot_cluster_and_data(s, header, data, cluster_list,  subtitle=None):
+    def write_plots(s, header, data, cluster_list,  subtitle=None):
         num_clusters = len(cluster_list)
         num_col = math.ceil(num_clusters/2.)
         num_row = math.ceil(num_clusters/float(num_col))
@@ -129,32 +144,49 @@ class KmeansSearch():
         
         for i,clusters in enumerate(cluster_list):
             k = clusters.shape[0]
+            d = clusters.shape[1]
+            if d > 2:
+                continue
             myTitle = 'k=' + str(k) + ' '
             if subtitle:
                 myTitle += ', ' + subtitle
             plt.subplot(num_row, num_col,i+1)
-            plt.scatter(data[:,0], data[:,1], alpha = 0.01)
-            plt.scatter(clusters[:,0], clusters[:,1], s=500, c='red', alpha =0.5)
-            plt.xlabel(header[0])
-            plt.ylabel(header[1])
+            if d==2:
+                plt.scatter(data[:,0], data[:,1], alpha = 0.01)
+                plt.scatter(clusters[:,0], clusters[:,1], s=500, c='red', alpha =0.5)
+                plt.xlabel(header[0])
+                plt.ylabel(header[1])
+            else:
+                plt.scatter(data[:,0], np.ones(data.shape[0]), alpha = 0.01)
+                plt.scatter(clusters[:,0], np.ones(clusters.shape[0]), s=500, c='red', alpha =0.5)
+                plt.xlabel(header[0])
+                    
             plt.title(myTitle)
         plt.tight_layout()      
         #plt.show()
         if(len(cluster_list) == 1):
-            plt.savefig('output/clusters_' + str(k) + '.png')
+            plt.savefig('output/clusters_' + '_'.join(header).replace(' ','') + '_' \
+                        + str(k) + '.png')
         else:
             k_start = cluster_list[0].shape[0]
             k_end = cluster_list[-1].shape[0]
-            plt.savefig('output/clusters_' + str(k_start) + 'to' + str(k_end) \
-                        + '.png')
+            plt.savefig('output/clusters_' + '_'.join(header).replace(' ','') + '_' + \
+                        str(k_start) + 'to' + str(k_end) + '.png')
             
     #-------------------------------------------
-    def write_k_search(s, k_range, sil_scores, ch_scores):
-        df_scores= pd.DataFrame.from_items([('sil score', sil_scores),\
-                                            ('CH score', ch_scores)])
+    def write_scores(s, features, k_range, sil_scores, ch_scores):
+        df_scores= pd.DataFrame.from_items([
+            ('features', '_'.join(features).replace(' ','')),
+            ('sil score', sil_scores),
+            ('CH score', ch_scores)])
         df_scores.index = k_range[0:len(sil_scores)]
-        df_scores.to_csv('output/scores.csv',index_label='k')
-            
+        # append to score file if exists, otherwise create new
+        if os.path.isfile('output/scores.csv'):
+            with open('output/scores.csv', 'a') as f:
+                df_scores.to_csv(f, header=False,index_label='k')        
+        else:
+            df_scores.to_csv('output/scores.csv', index_label='k')        
+    
 #------------------------------------------------------------------------
 def do_all(args):
     kmeans_search = KmeansSearch(args.i)    
@@ -162,7 +194,8 @@ def do_all(args):
     features=[' AU06_r',' AU12_r']
     if not os.path.isdir('output'):
         os.mkdir('output')
-    sil_score, ch_score = kmeans_search.cluster(range(2,15),features)
+    #sil_score, ch_score = kmeans_search.k_search(range(2,4),features)
+    kmeans_search.feature_search(features, 2)
     
 #------------------------------------------------------------------------
 if __name__ == '__main__':
