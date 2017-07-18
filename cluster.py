@@ -88,7 +88,7 @@ class KmeansSearch():
             sil_scores.append(sil_score)
             ch_scores.append(ch_score)
             s.plot_cluster_and_data(features, X, cluster_list)
-        s.write_k_search(k_range, sil_scores, ch_scores)
+            s.write_k_search(k_range, sil_scores, ch_scores)
         
         return sil_scores, ch_scores
     
@@ -145,13 +145,14 @@ class KmeansSearch():
         else:
             k_start = cluster_list[0].shape[0]
             k_end = cluster_list[-1].shape[0]
-            plt.savefig('output/clusters_' + str(k_start) + 'to' + str(k_end) + '.png')
+            plt.savefig('output/clusters_' + str(k_start) + 'to' + str(k_end) \
+                        + '.png')
             
-
+    #-------------------------------------------
     def write_k_search(s, k_range, sil_scores, ch_scores):
         df_scores= pd.DataFrame.from_items([('sil score', sil_scores),\
                                             ('CH score', ch_scores)])
-        df_scores.index = k_range
+        df_scores.index = k_range[0:len(sil_scores)]
         df_scores.to_csv('output/scores.csv',index_label='k')
             
 #------------------------------------------------------------------------
@@ -161,7 +162,7 @@ def do_all(args):
     features=[' AU06_r',' AU12_r']
     if not os.path.isdir('output'):
         os.mkdir('output')
-    sil_score, ch_score = kmeans_search.cluster(range(2,5),features)
+    sil_score, ch_score = kmeans_search.cluster(range(2,15),features)
     
 #------------------------------------------------------------------------
 if __name__ == '__main__':
