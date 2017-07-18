@@ -64,8 +64,6 @@ class KmeansSearch():
         logging.info('\tX.shape' + str(X.shape))
         for k in k_range:
             logging.info('\tk=' + str(k) )
-    
-            
             k_means = cluster.KMeans(n_clusters=k, max_iter=1000, n_jobs=1)
             k_means.fit(X)
             y = k_means.predict(X)
@@ -89,7 +87,7 @@ class KmeansSearch():
             cluster_list.append(clusters)
             sil_scores.append(sil_score)
             ch_scores.append(ch_score)
-        s.plot_cluster_and_data(features, X, cluster_list)
+            s.plot_cluster_and_data(features, X, cluster_list)
         s.write_k_search(k_range, sil_scores, ch_scores)
         
         return sil_scores, ch_scores
@@ -113,7 +111,7 @@ class KmeansSearch():
             sil_score_list = []
             for i in range (0,100):
                 X_train, X_test, y_train, y_test = train_test_split(X, y, \
-                                                     test_size=2000/X.shape[0])        
+                                                     test_size=2000./X.shape[0])        
                 sil_score = silhouette_score(X_test,y_test)
                 sil_score_list.append(sil_score)
             sil_score_avg = np.nanmean(sil_score_list)
@@ -125,8 +123,8 @@ class KmeansSearch():
     #-------------------------------------------
     def plot_cluster_and_data(s, header, data, cluster_list,  subtitle=None):
         num_clusters = len(cluster_list)
-        num_col = math.ceil(num_clusters/2)
-        num_row = math.ceil(num_clusters/num_col)
+        num_col = math.ceil(num_clusters/2.)
+        num_row = math.ceil(num_clusters/float(num_col))
         plt.figure(figsize=(8,8))
         
         for i,clusters in enumerate(cluster_list):
