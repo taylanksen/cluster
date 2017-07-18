@@ -54,7 +54,7 @@ class KmeansSearch():
     def feature_search(s, features, max_dim=2):
         """ runs k_search for all permutations of features
         """
-        k_range = range(2,4)
+        k_range = range(2,5)
         
         for num_features in range(1, max_dim+1):
             feature_combo_list = list(combinations(features,num_features))        
@@ -76,6 +76,11 @@ class KmeansSearch():
         X = s.df.loc[:,features].dropna().values
         logging.info('\tX.shape' + str(X.shape))
         for k in k_range:
+            png_fname = 'output/clusters_' + '_'.join(features).replace(' ','')\
+                + '_' + str(k) + '.png'
+            if os.path.isfile(png_fname):
+                logging.info('file exists, skipping...' + png_fname)
+                continue
             logging.info('\tk=' + str(k) )
             k_means = cluster.KMeans(n_clusters=k, max_iter=1000, n_jobs=1)
             k_means.fit(X)
@@ -98,12 +103,13 @@ class KmeansSearch():
             subtitle = 'sil score: ' + '{:.3f}'.format(sil_score)
             subtitle += ', CH score: ' + '{:.2E}'.format(ch_score)
             s.write_plots(features, X,[clusters], subtitle)  
+            s.write_scores(features, [k], [sil_score], [ch_score])
 
             cluster_list.append(clusters)
             sil_scores.append(sil_score)
             ch_scores.append(ch_score)
             s.write_plots(features, X, cluster_list)
-            s.write_scores(features, k_range, sil_scores, ch_scores)
+            #s.write_scores(features, k_range, sil_scores, ch_scores)
         
         return sil_scores, ch_scores
     
@@ -172,6 +178,7 @@ class KmeansSearch():
             k_end = cluster_list[-1].shape[0]
             plt.savefig('output/clusters_' + '_'.join(header).replace(' ','') + '_' + \
                         str(k_start) + 'to' + str(k_end) + '.png')
+            plt.close()
             
     #-------------------------------------------
     def write_scores(s, features, k_range, sil_scores, ch_scores):
