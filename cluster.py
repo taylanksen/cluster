@@ -51,10 +51,9 @@ class KmeansSearch():
         
         
     #-------------------------------------------
-    def feature_search(s, features, max_dim=2):
+    def feature_search(s, features, k_range, max_dim):
         """ runs k_search for all permutations of features
         """
-        k_range = range(2,5)
         
         for num_features in range(1, max_dim+1):
             feature_combo_list = list(combinations(features,num_features))        
@@ -199,10 +198,15 @@ def do_all(args):
     kmeans_search = KmeansSearch(args.i)    
     
     features=[' AU06_r',' AU12_r']
+    #features=[' AU01_r',' AU02_r',' AU05_r', ' AU06_r',' AU07_r',' AU09_r',\
+    #          ' AU10_r',' AU12_r',' AU14_r',' AU15_r',' AU17_r',' AU20_r',\
+    #          ' AU23_r',' AU25_r',' AU26_r',' AU45_r']
     if not os.path.isdir('output'):
         os.mkdir('output')
     #sil_score, ch_score = kmeans_search.k_search(range(2,4),features)
-    kmeans_search.feature_search(features, 2)
+    k_range = range(2,5)
+    max_d = 2
+    kmeans_search.feature_search(features, k_range, max_d)
     
 #------------------------------------------------------------------------
 if __name__ == '__main__':
