@@ -27,6 +27,7 @@ from sklearn.manifold import TSNE
 from sklearn.model_selection import train_test_split
 
 import matplotlib.pyplot as plt
+from matplotlib.ticker import NullFormatter
 
 import glob
 import os
@@ -81,7 +82,7 @@ class KmeansSearch():
                 logging.info('file exists, skipping...' + png_fname)
                 continue
             logging.info('\tk=' + str(k) )
-            k_means = cluster.KMeans(n_clusters=k, max_iter=1000, n_jobs=1)
+            k_means = cluster.KMeans(n_clusters=k, max_iter=1000, n_jobs=-1)
             k_means.fit(X)
             y = k_means.predict(X)
             
@@ -107,8 +108,8 @@ class KmeansSearch():
             cluster_list.append(clusters)
             sil_scores.append(sil_score)
             ch_scores.append(ch_score)
-            s.write_plots(features, X, cluster_list)
-            #s.write_scores(features, k_range, sil_scores, ch_scores)
+
+        s.write_plots(features, X, cluster_list)
         
         return sil_scores, ch_scores
     
@@ -155,19 +156,78 @@ class KmeansSearch():
             myTitle = 'k=' + str(k) + ' '
             if subtitle:
                 myTitle += ', ' + subtitle
-            plt.subplot(num_row, num_col,i+1)
+
             if d==2:
-                plt.scatter(data[:,0], data[:,1], alpha = 0.01)
-                plt.scatter(clusters[:,0], clusters[:,1], s=500, c='red', alpha =0.5)
-                plt.xlabel(header[0])
-                plt.ylabel(header[1])
+                if len(cluster_list) > 1:
+                    plt.subplot(num_row, num_col,i+1)                                
+                    plt.scatter(data[:,0], data[:,1], alpha = 0.01)
+                    plt.scatter(clusters[:,0], clusters[:,1], s=500, \
+                                c='red', alpha =0.5)
+                    plt.xlabel(header[0])
+                    plt.ylabel(header[1])
+                else:
+    
+                    nullfmt = NullFormatter()         # no labels
+                    
+                    # definitions for the axes
+                    left, width = 0.1, 0.65
+                    bottom, height = 0.1, 0.65
+                    bottom_h = left_h = left + width + 0.05
+                    
+                    rect_scatter = [left, bottom, width, height]
+                    rect_histx = [left, bottom_h, width, 0.2]
+                    rect_histy = [left_h, bottom, 0.2, height]
+                    
+                    # start with a rectangular Figure
+                    #plt.figure(1, figsize=(8, 8))
+                    
+                    axScatter = plt.axes(rect_scatter)
+                    axHistx = plt.axes(rect_histx)
+                    axHisty = plt.axes(rect_histy)
+                    
+                    # no labels
+                    axHistx.xaxis.set_major_formatter(nullfmt)
+                    axHisty.yaxis.set_major_formatter(nullfmt)
+                    
+                    # the scatter plot:
+                    axScatter.scatter(data[:,0], data[:,1], alpha = 0.01)
+                    axScatter.scatter(clusters[:,0], clusters[:,1], s=500, \
+                                      c='red', alpha =0.5)
+                    
+                    # now determine nice limits by hand:
+                    binwidth = 0.1
+                    xymax = np.max([np.max(np.fabs(data[:,0])), \
+                                    np.max(np.fabs(data[:,1]))])
+                    lim = (int(xymax/binwidth) + 1) * binwidth
+                    
+                    axScatter.set_xlim((0, lim))
+                    axScatter.set_ylim((0, lim))
+                    
+                    bins = np.arange(0, lim + binwidth, binwidth)
+                    axHistx.hist(data[:,0], bins=bins, color='green', \
+                                 histtype='bar', ec='black', normed=1)
+                    axHisty.hist(data[:,1], bins=bins, orientation='horizontal',\
+                                 histtype='bar', ec='black' , normed=1)
+                    
+                    axHistx.set_xlim(axScatter.get_xlim())
+                    axHisty.set_ylim(axScatter.get_ylim())                
+                    axScatter.set_title(myTitle)
+                    axScatter.set_xlabel(header[0])
+                    axScatter.set_ylabel(header[1])
+                
             else:
-                plt.scatter(data[:,0], np.ones(data.shape[0]), alpha = 0.01)
-                plt.scatter(clusters[:,0], np.ones(clusters.shape[0]), s=500, c='red', alpha =0.5)
+                if len(cluster_list) > 1:
+                    plt.subplot(num_row, num_col,i+1)        
+                plt.hist(data[:,0], 25, color='green', \
+                     histtype='bar', ec='black', normed=1)                    
+                #plt.scatter(data[:,0], np.ones(data.shape[0]), alpha = 0.01)
+                plt.scatter(clusters[:,0], np.zeros(clusters.shape[0]), s=500, \
+                            c='red')
                 plt.xlabel(header[0])
                     
-            plt.title(myTitle)
-        plt.tight_layout()      
+                plt.title(myTitle)
+        if len(cluster_list) > 1:
+            plt.tight_layout()      
         #plt.show()
         if(len(cluster_list) == 1):
             plt.savefig('output/clusters_' + '_'.join(header).replace(' ','') + '_' \
@@ -175,7 +235,7 @@ class KmeansSearch():
         else:
             k_start = cluster_list[0].shape[0]
             k_end = cluster_list[-1].shape[0]
-            plt.savefig('output/clusters_' + '_'.join(header).replace(' ','') + '_' + \
+            plt.savefig('output/clusters_' + '_'.join(header).replace(' ','') + '_R' + \
                         str(k_start) + 'to' + str(k_end) + '.png')
             plt.close()
             
@@ -203,9 +263,9 @@ def do_all(args):
     #          ' AU23_r',' AU25_r',' AU26_r',' AU45_r']
     if not os.path.isdir('output'):
         os.mkdir('output')
-    #sil_score, ch_score = kmeans_search.k_search(range(2,4),features)
     k_range = range(2,5)
     max_d = 2
+    #sil_score, ch_score = kmeans_search.k_search(k_range,features)
     kmeans_search.feature_search(features, k_range, max_d)
     
 #------------------------------------------------------------------------
