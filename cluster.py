@@ -19,6 +19,8 @@ import csv
 import numpy as np
 import pandas as pd
 import math
+from scipy import linalg
+from scipy.stats import multivariate_normal
 
 #import compare
 from sklearn import cluster
@@ -26,6 +28,7 @@ from sklearn.metrics import silhouette_score
 from sklearn.metrics import calinski_harabaz_score
 from sklearn.manifold import TSNE
 from sklearn.model_selection import train_test_split
+from sklearn import mixture
 
 import matplotlib.pyplot as plt
 from matplotlib.ticker import NullFormatter
@@ -38,6 +41,7 @@ import logging
 
 from collections import defaultdict
 from itertools import combinations
+import itertools
 
 logging.basicConfig(level=logging.DEBUG)
 # you can set the logging level from a command-line option such as:
@@ -45,7 +49,7 @@ logging.basicConfig(level=logging.DEBUG)
 
 
 #-------------------------------------------------------------------------------
-class KmeansSearch:
+class ClusterSearch:
     """ """
     
     def __init__(s, infile):
@@ -115,6 +119,54 @@ class KmeansSearch:
         return sil_scores, ch_scores
     
     #-------------------------------------------
+    def gmm_search(s, k_range, features):
+        """ runs kmeans, saves cluster file, saves plot file
+            returns silhoutte and Calinski scores 
+        """
+        logging.info('starting cluster search' )
+        logging.info('\tfeatures=' + str(features))
+
+        bic_scores = []
+        X = s.df.loc[:,features].dropna().values
+        logging.info('\tX.shape' + str(X.shape))
+        for k in k_range:
+            png_fname = 'output/clusters_' + '_'.join(features).replace(' ','')\
+                + '_' + str(k) + '.png'
+            if os.path.isfile(png_fname):
+                logging.info('file exists, skipping...' + png_fname)
+                continue
+            logging.info('\tk=' + str(k) )
+            #k_means = cluster.KMeans(n_clusters=k, max_iter=1000, n_jobs=-1)
+            gmm = mixture.GaussianMixture(n_components=k,
+                                          covariance_type='full',
+                                          #tol=1e-8,
+                                          tol=1e-6,
+                                          #max_iter=1000,
+                                          max_iter=100,
+                                          n_init=3,
+                                          reg_covar=2e-3)            
+            gmm.fit(X)
+            #y = gmm.predict(X)
+            
+            bic = gmm.bic(X)
+            
+            logging.info('bic with ' + str(k) + ' clusters: ' + \
+                             '{0:.3f}'.format(bic))
+            
+                
+            # write the clusters to a csv file
+            output_file = 'output/face_clusters_' + \
+                '_'.join(features).replace(' ','') + '_' + str(k) + '.csv'
+            #s.write_clusters(output_file, features, clusters)
+            subtitle = ', BIC: ' + '{:.2E}'.format(bic)
+            s.write_gmm_plots(gmm, features, X)
+            s.write_bics(features, [k], [bic])
+
+            bic_scores.append(bic)
+        
+        return bic_scores
+    
+    #-------------------------------------------
     def write_clusters(s, outfile, features, clusters):
         with open(outfile, 'w') as f:
             feature_data = []
@@ -125,6 +177,54 @@ class KmeansSearch:
                 row_txt = [str(x) for x in list(cluster_i)]
                 writer.writerow(row_txt)        
     
+    #-------------------------------------------
+    def write_gmm_plots(s, clf, features, X,  subtitle=None):
+        
+        Y_ = clf.predict(X)
+        k = clf.means_.shape[0]
+        outfile = 'output/gmm_' + \
+            '_'.join(features).replace(' ','') + '_' + str(k) + '.csv'
+        
+        color_iter = itertools.cycle(['navy', 'turquoise', 'cornflowerblue',
+                                      'darkorange'])
+        
+        for i, (mean, cov, color) in enumerate(zip(clf.means_, clf.covariances_,
+                                                   color_iter)):
+            #cov = cov * np.eye(2)
+            v, w = linalg.eigh(cov)
+            if not np.any(Y_ == i):
+                continue
+            plt.scatter(X[Y_ == i, 0], X[Y_ == i, 1], .8, color=color,alpha=.5)
+
+            x_vals = np.linspace(X[:,0].min(), X[:,0].max(), 50)
+            y_vals = np.linspace(X[:,1].min(), X[:,1].max(), 50)
+            x, y = np.meshgrid(x_vals, y_vals)    
+            pos = np.empty(x.shape + (2,))
+            pos[:, :, 0] = x; pos[:, :, 1] = y
+            rv = multivariate_normal(mean, cov)
+        
+            try: # not sure why, was running into ValueErrors
+                plt.contour(x, y, rv.pdf(pos))
+            except ValueError:
+                pass
+        
+        print(clf.means_)
+        sigmas = np.empty(clf.covariances_.shape[0],dtype=object)
+        for i in range(sigmas.shape[0]):
+            sigmas[i] = clf.covariances_[i]
+        cluster_data = np.concatenate((clf.means_,sigmas[:,np.newaxis]),axis=1)
+        df_clusters = pd.DataFrame(data=cluster_data,columns=features+['sigmas'])
+        df_clusters.to_csv(outfile,index=False)
+        #plt.xticks(())
+        #plt.yticks(())
+        plt.title('GMM')
+        plt.xlabel(features[0])
+        plt.ylabel(features[1])
+        #plt.subplots_adjust(hspace=.35, bottom=.02)
+        imgfile = 'output/gmm_' + \
+            '_'.join(features).replace(' ','') + '_' + str(k) + '.png'        
+        plt.savefig(imgfile)
+        
     #-------------------------------------------
     def calc_sil_score(s,X,y):
         """ Calculate silhoutte score with efficiency mods """
@@ -256,9 +356,22 @@ class KmeansSearch:
         else:
             df_scores.to_csv('output/scores.csv', index_label='k')        
 
+    #-------------------------------------------
+    def write_bics(s, features, k_range, bics):
+        df_scores= pd.DataFrame.from_items([
+            ('features', '_'.join(features).replace(' ','')),
+            ('bic', bics)])
+        df_scores.index = k_range[0:len(bics)]
+        # append to score file if exists, otherwise create new
+        if os.path.isfile('output/bic_scores.csv'):
+            with open('output/bic_scores.csv', 'a') as f:
+                df_scores.to_csv(f, header=False,index_label='k')        
+        else:
+            df_scores.to_csv('output/bic_scores.csv', index_label='k') 
+
 #------------------------------------------------------------------------
 def do_all(args):
-    kmeans_search = KmeansSearch(args.i)    
+    c_search = ClusterSearch(args.i)    
     
     features=['AU06_r','AU12_r']
     #features=['AU01_r','AU02_r','AU05_r', 'AU06_r','AU07_r','AU09_r',\
@@ -268,14 +381,15 @@ def do_all(args):
         os.mkdir('output')
     k_range = range(2,5)
     max_d = 2
-    #sil_score, ch_score = kmeans_search.k_search(k_range,features)
-    kmeans_search.feature_search(features, k_range, max_d)
+    c_search.k_search(k_range,features)
+    #c_search.feature_search(features, k_range, max_d)
+    #c_search.gmm_search(k_range,features)
     
 #------------------------------------------------------------------------
 if __name__ == '__main__':
 
     # Setup commandline parser
-    help_intro = 'Program for running kmeans variants.' 
+    help_intro = 'Program for running clustering variants.' 
     #help_intro += ' example usage:\n\t$ ./avg_master.py -i \'example/*_openface.txt\''
     parser = argparse.ArgumentParser(description=help_intro)
 
