@@ -144,6 +144,8 @@ class KmeansSearch():
     #-------------------------------------------
     def write_plots(s, header, data, cluster_list,  subtitle=None):
         num_clusters = len(cluster_list)
+        if num_clusters == 0:
+            return
         num_col = math.ceil(num_clusters/2.)
         num_row = math.ceil(num_clusters/float(num_col))
         plt.figure(figsize=(8,8))
