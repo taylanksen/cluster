@@ -14,6 +14,7 @@
       $ python -i 'example/test.csv'
 ------------------------------------------------------------------------
 """
+from __future__ import print_function
 import csv
 import numpy as np
 import pandas as pd
@@ -44,11 +45,11 @@ logging.basicConfig(level=logging.DEBUG)
 
 
 #-------------------------------------------------------------------------------
-class KmeansSearch():
+class KmeansSearch:
     """ """
     
     def __init__(s, infile):
-        s.df = pd.read_csv(infile) 
+        s.df = pd.read_csv(infile, skipinitialspace=True) 
         
         
     #-------------------------------------------
@@ -254,15 +255,15 @@ class KmeansSearch():
                 df_scores.to_csv(f, header=False,index_label='k')        
         else:
             df_scores.to_csv('output/scores.csv', index_label='k')        
-    
+
 #------------------------------------------------------------------------
 def do_all(args):
     kmeans_search = KmeansSearch(args.i)    
     
-    features=[' AU06_r',' AU12_r']
-    #features=[' AU01_r',' AU02_r',' AU05_r', ' AU06_r',' AU07_r',' AU09_r',\
-    #          ' AU10_r',' AU12_r',' AU14_r',' AU15_r',' AU17_r',' AU20_r',\
-    #          ' AU23_r',' AU25_r',' AU26_r',' AU45_r']
+    features=['AU06_r','AU12_r']
+    #features=['AU01_r','AU02_r','AU05_r', 'AU06_r','AU07_r','AU09_r',\
+    #          'AU10_r','AU12_r','AU14_r','AU15_r','AU17_r','AU20_r',\
+    #          'AU23_r','AU25_r','AU26_r','AU45_r']
     if not os.path.isdir('output'):
         os.mkdir('output')
     k_range = range(2,5)
