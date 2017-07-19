@@ -55,17 +55,15 @@ class ClusterSearch:
     def __init__(s, infile):
         s.df = pd.read_csv(infile, skipinitialspace=True) 
         
-        
     #-------------------------------------------
-    def feature_search(s, features, k_range, max_dim):
+    def feature_search(s, features, k_range, max_dim, f_search):
         """ runs k_search for all permutations of features
         """
         
         for num_features in range(1, max_dim+1):
             feature_combo_list = list(combinations(features,num_features))        
             for feature_subset in feature_combo_list:
-                s.k_search(k_range, feature_subset)
-                
+                f_search(k_range, feature_subset)
                 
     #-------------------------------------------
     def k_search(s, k_range, features):
@@ -128,6 +126,8 @@ class ClusterSearch:
 
         bic_scores = []
         X = s.df.loc[:,features].dropna().values
+        X_ = X[(X != 0).all(1)] # drop any rows with a zero
+        
         logging.info('\tX.shape' + str(X.shape))
         for k in k_range:
             png_fname = 'output/clusters_' + '_'.join(features).replace(' ','')\
@@ -141,27 +141,23 @@ class ClusterSearch:
                                           covariance_type='full',
                                           #tol=1e-8,
                                           tol=1e-6,
-                                          #max_iter=1000,
-                                          max_iter=100,
+                                          max_iter=1000,
+                                          #max_iter=200,
                                           n_init=3,
-                                          reg_covar=2e-3)            
-            gmm.fit(X)
-            #y = gmm.predict(X)
-            
-            bic = gmm.bic(X)
-            
+                                          reg_covar=2e-6)            
+            gmm.fit(X_)
+            bic = gmm.bic(X_)  
             logging.info('bic with ' + str(k) + ' clusters: ' + \
                              '{0:.3f}'.format(bic))
-            
                 
             # write the clusters to a csv file
             output_file = 'output/face_clusters_' + \
                 '_'.join(features).replace(' ','') + '_' + str(k) + '.csv'
             #s.write_clusters(output_file, features, clusters)
             subtitle = ', BIC: ' + '{:.2E}'.format(bic)
-            s.write_gmm_plots(gmm, features, X)
+            if len(features) <= 2:
+                s.write_gmm_plots(gmm, features, X, subtitle)
             s.write_bics(features, [k], [bic])
-
             bic_scores.append(bic)
         
         return bic_scores
@@ -177,37 +173,13 @@ class ClusterSearch:
                 row_txt = [str(x) for x in list(cluster_i)]
                 writer.writerow(row_txt)        
     
+    
     #-------------------------------------------
-    def write_gmm_plots(s, clf, features, X,  subtitle=None):
-        
-        Y_ = clf.predict(X)
-        k = clf.means_.shape[0]
-        outfile = 'output/gmm_' + \
-            '_'.join(features).replace(' ','') + '_' + str(k) + '.csv'
-        
-        color_iter = itertools.cycle(['navy', 'turquoise', 'cornflowerblue',
-                                      'darkorange'])
-        
-        for i, (mean, cov, color) in enumerate(zip(clf.means_, clf.covariances_,
-                                                   color_iter)):
-            #cov = cov * np.eye(2)
-            v, w = linalg.eigh(cov)
-            if not np.any(Y_ == i):
-                continue
-            plt.scatter(X[Y_ == i, 0], X[Y_ == i, 1], .8, color=color,alpha=.5)
+    def write_gmm_clusters(s, clf, features, X,  subtitle=None):
 
-            x_vals = np.linspace(X[:,0].min(), X[:,0].max(), 50)
-            y_vals = np.linspace(X[:,1].min(), X[:,1].max(), 50)
-            x, y = np.meshgrid(x_vals, y_vals)    
-            pos = np.empty(x.shape + (2,))
-            pos[:, :, 0] = x; pos[:, :, 1] = y
-            rv = multivariate_normal(mean, cov)
-        
-            try: # not sure why, was running into ValueErrors
-                plt.contour(x, y, rv.pdf(pos))
-            except ValueError:
-                pass
-        
+        outfile = 'output/gmm_' 
+        outfile += '_'.join(features).replace(' ','') + '_' + str(k) + '.csv'
+
         print(clf.means_)
         sigmas = np.empty(clf.covariances_.shape[0],dtype=object)
         for i in range(sigmas.shape[0]):
@@ -215,15 +187,78 @@ class ClusterSearch:
         cluster_data = np.concatenate((clf.means_,sigmas[:,np.newaxis]),axis=1)
         df_clusters = pd.DataFrame(data=cluster_data,columns=features+['sigmas'])
         df_clusters.to_csv(outfile,index=False)
-        #plt.xticks(())
-        #plt.yticks(())
-        plt.title('GMM')
+    
+    #-------------------------------------------
+    def write_gmm_plots(s, clf, features, X,  subtitle=None):
+        """ plots and saves 1d and 2d gmm specified in clf """
+        
+        plt.figure(figsize=(8,8))
+        # add a null cluster
+
+        m2 = np.concatenate((clf.means_[:],[np.zeros_like(clf.means_[0])]))
+        c2 = np.concatenate((clf.covariances_[:],
+                             [1e-6*np.eye(clf.covariances_[0].shape[0])]))
+        p2 = np.concatenate((clf.precisions_[:],
+                                 [1e6*np.eye(clf.precisions_[0].shape[0])]))
+        clf.covariances_ = c2
+        clf.precisions_cholesky_ = p2
+        k,d = clf.means_.shape
+        k += 1
+        clf2 = mixture.GaussianMixture(n_components=k,
+                                          covariance_type='full',
+                                          means_init=m2, precisions_init=p2, 
+                                          max_iter=1)
+        clf2.fit(X)
+        Y = clf2.predict(X)
+        color_iter = itertools.cycle(['navy', 'turquoise', 'cornflowerblue',
+                                      'darkorange'])
+
+        plt.title('GMM ' + ','.join(features) + ' ' + subtitle)
         plt.xlabel(features[0])
-        plt.ylabel(features[1])
-        #plt.subplots_adjust(hspace=.35, bottom=.02)
-        imgfile = 'output/gmm_' + \
-            '_'.join(features).replace(' ','') + '_' + str(k) + '.png'        
+        
+        if d==2:
+            for i, (mean, cov, color) in enumerate(zip(clf2.means_, clf2.covariances_,
+                                                       color_iter)):
+                plt.ylabel(features[1])
+                v, w = linalg.eigh(cov)
+                if not np.any(Y == i):
+                    continue
+                plt.scatter(X[Y == i, 0], X[Y == i, 1], .8, color=color,alpha=.5)
+    
+                x_vals = np.linspace(X[:,0].min(), X[:,0].max(), 50)
+                y_vals = np.linspace(X[:,1].min(), X[:,1].max(), 50)
+                x, y = np.meshgrid(x_vals, y_vals)    
+                pos = np.empty(x.shape + (2,))
+                pos[:, :, 0] = x; pos[:, :, 1] = y
+                rv = multivariate_normal(mean, cov)
+            
+                try: # not sure why, was running into ValueErrors
+                    plt.contour(x, y, rv.pdf(pos))
+                except ValueError:
+                    pass
+                
+        elif d==1:
+            rv_sum = np.zeros(100)
+            
+            x = np.linspace(min(X),max(X),100)
+            bins = np.linspace(min(X),max(X),100)
+            plt.hist(X[:,0], bins=bins, color='green', histtype='bar', \
+                     ec='black', normed=True)
+            axes = plt.gca()
+            ylim = axes.get_ylim()
+            for i, (mean, cov, color) in enumerate(zip(clf2.means_, clf2.covariances_,
+                                                               color_iter)):
+                rv = multivariate_normal(mean, cov)
+                plt.plot(x, rv.pdf(x), lw=1)
+                rv_sum += rv.pdf(x)*X[Y == i, 0].shape[0]/X.shape[0]
+
+            plt.plot(x, rv_sum, lw=5, color='red', alpha=.4)           
+            axes.set_ylim(ylim)
+
+        imgfile = 'output/gmm_'
+        imgfile += '_'.join(features).replace(' ','') + '_' + str(k) + '.png'
         plt.savefig(imgfile)
+        plt.close()
         
     #-------------------------------------------
     def calc_sil_score(s,X,y):
@@ -269,7 +304,6 @@ class ClusterSearch:
                     plt.xlabel(header[0])
                     plt.ylabel(header[1])
                 else:
-    
                     nullfmt = NullFormatter()         # no labels
                     
                     # definitions for the axes
@@ -280,9 +314,6 @@ class ClusterSearch:
                     rect_scatter = [left, bottom, width, height]
                     rect_histx = [left, bottom_h, width, 0.2]
                     rect_histy = [left_h, bottom, 0.2, height]
-                    
-                    # start with a rectangular Figure
-                    #plt.figure(1, figsize=(8, 8))
                     
                     axScatter = plt.axes(rect_scatter)
                     axHistx = plt.axes(rect_histx)
@@ -379,11 +410,11 @@ def do_all(args):
     #          'AU23_r','AU25_r','AU26_r','AU45_r']
     if not os.path.isdir('output'):
         os.mkdir('output')
-    k_range = range(2,5)
     max_d = 2
-    c_search.k_search(k_range,features)
-    #c_search.feature_search(features, k_range, max_d)
-    #c_search.gmm_search(k_range,features)
+    #c_search.k_search(k_range,features)
+    #c_search.gmm_search(range(1,16),features)
+    c_search.feature_search(features, range(2,4), max_d, c_search.k_search)
+    #c_search.feature_search(features, range(1,4), max_d, c_search.gmm_search)
     
 #------------------------------------------------------------------------
 if __name__ == '__main__':
