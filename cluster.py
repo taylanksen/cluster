@@ -112,11 +112,12 @@ class ClusterSearch:
             sil_scores.append(sil_score)
             ch_scores.append(ch_score)
 
-        k_start = cluster_list[0].shape[0]
-        k_end = cluster_list[-1].shape[0]
-        fname = 'output/clusters_' + '_'.join(features).replace(' ','') + '_R' + \
-                                str(k_start) + 'to' + str(k_end) + '.png'
-        s.write_plots(fname, features, X, cluster_list)
+        if len(cluster_list) > 1:
+            k_start = cluster_list[0].shape[0]
+            k_end = cluster_list[-1].shape[0]
+            fname = 'output/clusters_' + '_'.join(features).replace(' ','') + '_R' + \
+                                    str(k_start) + 'to' + str(k_end) + '.png'
+            s.write_plots(fname, features, X, cluster_list)
         
         return sil_scores, ch_scores
     
@@ -365,15 +366,9 @@ class ClusterSearch:
                 plt.xlabel(header[0])
                     
                 plt.title(myTitle)
-        if len(cluster_list) == 1:
-            plt.tight_layout()            
-            plt.savefig(fname)
-        else:
-            k_start = cluster_list[0].shape[0]
-            k_end = cluster_list[-1].shape[0]
-            plt.savefig('output/clusters_' + '_'.join(header).replace(' ','') + '_R' + \
-                        str(k_start) + 'to' + str(k_end) + '.png')
-            plt.close()
+                #plt.tight_layout()            
+        plt.savefig(fname)
+        plt.close()
             
     #-------------------------------------------
     def write_scores(s, features, k_range, sil_scores, ch_scores):
@@ -416,7 +411,7 @@ def do_all(args):
     #c_search.k_search(k_range,features)
     #c_search.gmm_search(range(1,16),features)
     if args.t == 'km':
-        c_search.feature_search(features, range(2,4), max_d, c_search.k_search)
+        c_search.feature_search(features, range(2,args.k+1), max_d, c_search.k_search)
     elif args.t == 'gmm':
         c_search.feature_search(features, range(1,args.k+1), max_d, c_search.gmm_search)
     
