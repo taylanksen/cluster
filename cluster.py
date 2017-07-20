@@ -67,7 +67,7 @@ class ClusterSearch:
                 
     #-------------------------------------------
     def k_search(s, k_range, features):
-        """ runs kmeans, saves cluster file, saves plot file
+        """ Runs kmeans, saves cluster file, saves plot file,
             returns silhoutte and Calinski scores 
         """
         logging.info('starting cluster search' )
@@ -100,25 +100,29 @@ class ClusterSearch:
             clusters = k_means.cluster_centers_
                 
             # write the clusters to a csv file
-            output_file = 'output/face_clusters_' + \
+            cluster_fname = 'output/face_clusters_' + \
                 '_'.join(features).replace(' ','') + '_' + str(k) + '.csv'
-            s.write_clusters(output_file, features, clusters)
+            s.write_clusters(cluster_fname, features, clusters)
             subtitle = 'sil score: ' + '{:.3f}'.format(sil_score)
             subtitle += ', CH score: ' + '{:.2E}'.format(ch_score)
-            s.write_plots(features, X,[clusters], subtitle)  
+            s.write_plots(png_fname, features, X,[clusters], subtitle)  
             s.write_scores(features, [k], [sil_score], [ch_score])
 
             cluster_list.append(clusters)
             sil_scores.append(sil_score)
             ch_scores.append(ch_score)
 
-        s.write_plots(features, X, cluster_list)
+        k_start = cluster_list[0].shape[0]
+        k_end = cluster_list[-1].shape[0]
+        fname = 'output/clusters_' + '_'.join(features).replace(' ','') + '_R' + \
+                                str(k_start) + 'to' + str(k_end) + '.png'
+        s.write_plots(fname, features, X, cluster_list)
         
         return sil_scores, ch_scores
     
     #-------------------------------------------
-    def gmm_search(s, k_range, features):
-        """ runs kmeans, saves cluster file, saves plot file
+    def gmm_search(s, k_range, features, origin_cluster=False):
+        """ Runs GMM, saves medioid file, saves plot file.
             returns silhoutte and Calinski scores 
         """
         logging.info('starting cluster search' )
@@ -126,11 +130,13 @@ class ClusterSearch:
 
         bic_scores = []
         X = s.df.loc[:,features].dropna().values
-        X_ = X[(X != 0).all(1)] # drop any rows with a zero
-        
+        if origin_cluster:
+            X_ = X[~(X == 0).all(1)] # drop any rows with all zero
+        else:
+            X_ = X
         logging.info('\tX.shape' + str(X.shape))
         for k in k_range:
-            png_fname = 'output/clusters_' + '_'.join(features).replace(' ','')\
+            png_fname = 'output/gmm_' + '_'.join(features).replace(' ','')\
                 + '_' + str(k) + '.png'
             if os.path.isfile(png_fname):
                 logging.info('file exists, skipping...' + png_fname)
@@ -153,10 +159,12 @@ class ClusterSearch:
             # write the clusters to a csv file
             output_file = 'output/face_clusters_' + \
                 '_'.join(features).replace(' ','') + '_' + str(k) + '.csv'
-            #s.write_clusters(output_file, features, clusters)
+            outfile = 'output/gmm_' 
+            outfile += '_'.join(features).replace(' ','') + '_' + str(k) + '.csv'            
+            #s.write_gmm_clusters(outfile, gmm, features, clusters)
             subtitle = ', BIC: ' + '{:.2E}'.format(bic)
             if len(features) <= 2:
-                s.write_gmm_plots(gmm, features, X, subtitle)
+                s.write_gmm_plots(png_fname, gmm, features, X, origin_cluster, subtitle)
             s.write_bics(features, [k], [bic])
             bic_scores.append(bic)
         
@@ -164,6 +172,8 @@ class ClusterSearch:
     
     #-------------------------------------------
     def write_clusters(s, outfile, features, clusters):
+        """ Writes cluster means to a csv file. 
+        """
         with open(outfile, 'w') as f:
             feature_data = []
             writer = csv.writer(f)
@@ -175,10 +185,10 @@ class ClusterSearch:
     
     
     #-------------------------------------------
-    def write_gmm_clusters(s, clf, features, X,  subtitle=None):
-
-        outfile = 'output/gmm_' 
-        outfile += '_'.join(features).replace(' ','') + '_' + str(k) + '.csv'
+    def write_gmm_clusters(s, outfile, clf, features, X,  subtitle=None):
+        """ Saves the means, covariances, and weights of gmm clusters in clf. 
+            TODO: add weights (priors).
+        """
 
         print(clf.means_)
         sigmas = np.empty(clf.covariances_.shape[0],dtype=object)
@@ -189,41 +199,34 @@ class ClusterSearch:
         df_clusters.to_csv(outfile,index=False)
     
     #-------------------------------------------
-    def write_gmm_plots(s, clf, features, X,  subtitle=None):
-        """ plots and saves 1d and 2d gmm specified in clf """
+    def write_gmm_plots(s, fname, clf, features, X,  origin_cluster, 
+                        subtitle=None):
+        """ Saves 1d and 2d plots of gmm specified in clf.
+            TODO: plot tsne when d > 2.
+        """
         
         plt.figure(figsize=(8,8))
-        # add a null cluster
-
-        m2 = np.concatenate((clf.means_[:],[np.zeros_like(clf.means_[0])]))
-        c2 = np.concatenate((clf.covariances_[:],
-                             [1e-6*np.eye(clf.covariances_[0].shape[0])]))
-        p2 = np.concatenate((clf.precisions_[:],
-                                 [1e6*np.eye(clf.precisions_[0].shape[0])]))
-        clf.covariances_ = c2
-        clf.precisions_cholesky_ = p2
         k,d = clf.means_.shape
-        k += 1
-        clf2 = mixture.GaussianMixture(n_components=k,
-                                          covariance_type='full',
-                                          means_init=m2, precisions_init=p2, 
-                                          max_iter=1)
-        clf2.fit(X)
-        Y = clf2.predict(X)
+        if origin_cluster:
+            X_ = X[~(X == 0).all(1)] # drop any rows with all zero
+        else:
+            X_ = X
+        Y_ = clf.predict(X_)
         color_iter = itertools.cycle(['navy', 'turquoise', 'cornflowerblue',
                                       'darkorange'])
 
-        plt.title('GMM ' + ','.join(features) + ' ' + subtitle)
+        plt.title('GMM: k=' + str(k) + ', ' + ','.join(features) + ' ' \
+                  + subtitle)
         plt.xlabel(features[0])
         
         if d==2:
-            for i, (mean, cov, color) in enumerate(zip(clf2.means_, clf2.covariances_,
+            for i, (mean, cov, color) in enumerate(zip(clf.means_, clf.covariances_,
                                                        color_iter)):
                 plt.ylabel(features[1])
                 v, w = linalg.eigh(cov)
-                if not np.any(Y == i):
+                if not np.any(Y_ == i):
                     continue
-                plt.scatter(X[Y == i, 0], X[Y == i, 1], .8, color=color,alpha=.5)
+                plt.scatter(X_[Y_ == i, 0], X[Y_ == i, 1], .8, color=color,alpha=.7)
     
                 x_vals = np.linspace(X[:,0].min(), X[:,0].max(), 50)
                 y_vals = np.linspace(X[:,1].min(), X[:,1].max(), 50)
@@ -246,23 +249,22 @@ class ClusterSearch:
                      ec='black', normed=True)
             axes = plt.gca()
             ylim = axes.get_ylim()
-            for i, (mean, cov, color) in enumerate(zip(clf2.means_, clf2.covariances_,
+            for i, (mean, cov, color) in enumerate(zip(clf.means_, clf.covariances_,
                                                                color_iter)):
                 rv = multivariate_normal(mean, cov)
-                plt.plot(x, rv.pdf(x), lw=1)
-                rv_sum += rv.pdf(x)*X[Y == i, 0].shape[0]/X.shape[0]
+                plt.plot(x, clf.weights_[i]*rv.pdf(x), lw=2)
+                rv_sum += clf.weights_[i]*rv.pdf(x)
 
             plt.plot(x, rv_sum, lw=5, color='red', alpha=.4)           
             axes.set_ylim(ylim)
 
-        imgfile = 'output/gmm_'
-        imgfile += '_'.join(features).replace(' ','') + '_' + str(k) + '.png'
-        plt.savefig(imgfile)
+        plt.savefig(fname)
         plt.close()
         
     #-------------------------------------------
     def calc_sil_score(s,X,y):
-        """ Calculate silhoutte score with efficiency mods """
+        """ Calculate silhoutte score with efficiency mods.
+        """
         if(X.shape[0] > 5000):
             # due to efficiency reasons, we need to only use subsample
             sil_score_list = []
@@ -278,7 +280,10 @@ class ClusterSearch:
         return sil_score_avg
         
     #-------------------------------------------
-    def write_plots(s, header, data, cluster_list,  subtitle=None):
+    def write_plots(s, fname, header, data, cluster_list,  subtitle=None):
+        """ Save png files for plots of data with clusters.
+            TODO: plot tsne when d > 2.
+        """
         num_clusters = len(cluster_list)
         if num_clusters == 0:
             return
@@ -352,7 +357,7 @@ class ClusterSearch:
             else:
                 if len(cluster_list) > 1:
                     plt.subplot(num_row, num_col,i+1)        
-                plt.hist(data[:,0], 25, color='green', \
+                plt.hist(data[:,0], 50, color='green', \
                      histtype='bar', ec='black', normed=1)                    
                 #plt.scatter(data[:,0], np.ones(data.shape[0]), alpha = 0.01)
                 plt.scatter(clusters[:,0], np.zeros(clusters.shape[0]), s=500, \
@@ -360,12 +365,9 @@ class ClusterSearch:
                 plt.xlabel(header[0])
                     
                 plt.title(myTitle)
-        if len(cluster_list) > 1:
-            plt.tight_layout()      
-        #plt.show()
-        if(len(cluster_list) == 1):
-            plt.savefig('output/clusters_' + '_'.join(header).replace(' ','') + '_' \
-                        + str(k) + '.png')
+        if len(cluster_list) == 1:
+            plt.tight_layout()            
+            plt.savefig(fname)
         else:
             k_start = cluster_list[0].shape[0]
             k_end = cluster_list[-1].shape[0]
@@ -413,8 +415,10 @@ def do_all(args):
     max_d = 2
     #c_search.k_search(k_range,features)
     #c_search.gmm_search(range(1,16),features)
-    c_search.feature_search(features, range(2,4), max_d, c_search.k_search)
-    #c_search.feature_search(features, range(1,4), max_d, c_search.gmm_search)
+    if args.t == 'km':
+        c_search.feature_search(features, range(2,4), max_d, c_search.k_search)
+    elif args.t == 'gmm':
+        c_search.feature_search(features, range(1,args.k+1), max_d, c_search.gmm_search)
     
 #------------------------------------------------------------------------
 if __name__ == '__main__':
@@ -426,9 +430,14 @@ if __name__ == '__main__':
 
     parser.add_argument('-i', help='inputs, ex:example/*.txt', type=str, 
                         default='example/test.csv')
+    parser.add_argument('-t', help='type: gmm, km', type=str, 
+                        default='km')
+    parser.add_argument('-k', help='maximum k', type=int, 
+                        default=6)
+    
     args = parser.parse_args()
     
-    print('args: ',args.i)
+    print('args: ', args.i)
 
     do_all(args)
     logging.info('PROGRAM COMPLETE')
