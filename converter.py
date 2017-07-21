@@ -47,7 +47,7 @@ class ClusterConverter:
         k_means = cluster.KMeans(n_clusters=k, max_iter=2000, n_init=10)
         k_means.cluster_centers_ = s.cluster_def # Set the cluster centers
         
-        np.set_printoptions(threshold=np.inf) # So it prints whole array, no ...
+        np.set_printoptions(threshold=np.inf) # So it prints whole array, w/o ...
         
         # Predict the closest cluster for the sequence entries and write to file
         with open(outfile, 'w') as f:
@@ -70,7 +70,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=help_intro)
 
     parser.add_argument('-c',help='cluster_file, ex:example/face_clusters.csv',\
-                        type=str, default='output/face_clusters_AU06_r_AU12_r_4.csv')
+                        type=str, default='example/face_clusters_AU06_r_AU12_r_4.csv')
     parser.add_argument('-d', help='data_file, ex:example/test.csv', \
                         type=str, default='example/test.csv')
     parser.add_argument('-o', help='output_filename, ex:output/test.seq', \
