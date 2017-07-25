@@ -21,6 +21,7 @@ import pandas as pd
 import math
 from scipy import linalg
 from scipy.stats import multivariate_normal
+import operator 
 
 #import compare
 from sklearn import cluster
@@ -170,6 +171,36 @@ class ClusterSearch:
             bic_scores.append(bic)
         
         return bic_scores
+    
+    
+    #-------------------------------------------
+    def bin_search(s, k_range, features):
+        """ Counts all possible binary combinations of features in data. 
+        """
+        logging.info('starting bin search' )
+        logging.info('\tfeatures=' + str(features))
+
+        cluster_list = []
+        sil_scores = []
+        ch_scores = []
+        X = s.df.loc[:,features].dropna().values
+        logging.info('\tX.shape' + str(X.shape))
+        count_dict = {}
+        for i in list(itertools.product([0, 1], repeat=len(features))):    
+            count_dict[i] = 0
+            
+        count_tensor = np.zeros(len(features), dtype=int)
+        for i in range(X.shape[0]):
+            #count_tensor[X.iloc[i]]] += 1
+            count_dict[tuple(X[i])] += 1
+        
+        sorted_counts = sorted(count_dict.items(), key=operator.itemgetter(1))
+        total = sum(count_dict.values())
+        print(features)
+        for v,k in sorted_counts:
+            print(v ,  ' {:.3}'.format(k/total))
+            
+        return    
     
     #-------------------------------------------
     def write_clusters(s, outfile, features, clusters):
@@ -414,12 +445,18 @@ def do_all(args):
         c_search.feature_search(features, range(2,args.k+1), max_d, c_search.k_search)
     elif args.t == 'gmm':
         c_search.feature_search(features, range(1,args.k+1), max_d, c_search.gmm_search)
+    elif args.t == 'bin':
+        features=['AU01_c','AU02_c','AU05_c', 'AU06_c','AU07_c','AU09_c',\
+                  'AU10_c','AU12_c','AU14_c','AU15_c','AU17_c','AU20_c',\
+                  'AU23_c','AU25_c','AU26_c','AU45_c']    
+        c_search.feature_search(features, range(1,args.k+1), 3, c_search.bin_search)
+        
     
 #------------------------------------------------------------------------
 if __name__ == '__main__':
 
     # Setup commandline parser
-    help_intro = 'Program for running clustering variants.' 
+    help_intro = 'Program for counting clustering variants.' 
     #help_intro += ' example usage:\n\t$ ./avg_master.py -i \'example/*_openface.txt\''
     parser = argparse.ArgumentParser(description=help_intro)
 
