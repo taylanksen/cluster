@@ -39,7 +39,7 @@ class ClusterConverter:
         print('Reading data sequence from: {}'.format(infile))
         # Read the infile for only the features designated by cluster_def
         df = pd.read_csv(infile, skipinitialspace=True, usecols=list(s.cluster_def))
-        s.data = df # Dataframe for the data points
+        s.data = df[::15] # Dataframe for the data points - ONLY USES EVERY 15'th FRAME
     
     def write_cluster_sequence(s,outfile):
         """ uses KMeans prediction to print sequence of closest clusters """
@@ -50,7 +50,7 @@ class ClusterConverter:
         np.set_printoptions(threshold=np.inf) # So it prints whole array, w/o ...
         
         # Predict the closest cluster for the sequence entries and write to file
-        with open(outfile, 'w') as f:
+        with open(outfile, 'w+') as f:
             f.write(str(k_means.predict(s.data))[1:-1]) #[1:-1] to remove the '[]'
 
         print('Cluster Index Sequnce written to: {}'.format(outfile))
@@ -61,6 +61,36 @@ def do_all(args):
     cluster_converter.load_cluster(args.c)
     cluster_converter.load_data_sequence(args.d)
     cluster_converter.write_cluster_sequence(args.o)
+
+#------------------------------------------------------------------------
+def convert_all(args):
+    """  Converts all files with '-W-' in the name from args.d folder
+    into args.o folder, inside a 'truthers' or 'bluffers' subfolder
+    and replacing 'csv' with 'seq'  """
+    
+    args.d = 'example/test_input' # TODO: Pass the desired infolder name as args.d
+    args.o = 'example/test_output' # TODO: Pass the desired outfolder name as args.o
+    #args.c = '/public/tsen/clusterResults/km_all_k15_d2/face_clusters_AU06_r_AU12_r_5.csv'    
+    #args.d = '/public/tsen/OpenFace'
+    
+    # Make sure output folder and subfolders exist
+    os.makedirs(args.o, exist_ok=True)
+    os.makedirs(args.o + '/truthers', exist_ok=True)
+    os.makedirs(args.o + '/bluffers', exist_ok=True)
+   
+    cluster_converter = ClusterConverter()
+    cluster_converter.load_cluster(args.c) # Load cluster definition
+    
+    # Convert all Witness files to cluster sequences
+    for name in glob.glob(args.d + '/*'):
+        if('-W-' in name): # Only want Witness data
+            cluster_converter.load_data_sequence(name)            
+            if('-T-' in name): # Truth-Teller
+                outfile = name.replace(args.d,args.o+'/truthers').replace('csv','seq')                
+            if('-B-' in name): # Bluffer
+                outfile = name.replace(args.d,args.o+'/bluffers').replace('csv','seq')                
+            cluster_converter.write_cluster_sequence(outfile)
+
 
 #------------------------------------------------------------------------
 if __name__ == '__main__':
@@ -79,6 +109,7 @@ if __name__ == '__main__':
     
     print('args: ', args)
 
-    do_all(args)
+    #do_all(args)
+    convert_all(args)
     logging.info('PROGRAM COMPLETE')
 
