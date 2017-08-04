@@ -10,6 +10,7 @@ import numpy as np
 import pandas as pd
 from sklearn import cluster
 from sklearn import mixture
+from scipy.stats import multivariate_normal
 
 import matplotlib.pyplot as plt
 
@@ -60,33 +61,33 @@ class ClusterConverter:
 def load_gmm_cluster(infile):
     """ loads a gmm cluster file into a df """
     print("Reading cluster definition from: {}".format(infile))
-    cluster_list = []
-    with open(infile) as csvfile:
-        readCSV = csv.reader(csvfile, delimiter=',')
-        
-        for row in readCSV:
-            cluster_list.append(row)
     
-    au06 =[]
-    au12 =[]
-    sigmas = []
     means = []
-    for i in range(1, len(cluster_list)):
-        au06.append(np.float(cluster_list[i][0]))
-        au12.append(np.float(cluster_list[i][1]))
-        temp = cluster_list[i][2].split('\n')
-        first = re.findall(r"[+-]? *(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?", temp[0])
-        y1 = (np.array(first)).astype(np.float)
-        y1 =y1.reshape(1,2)
-        second = re.findall(r"[+-]? *(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?", temp[1])
-        y2  = (np.array(second)).astype(np.float)
-        y2 =y2.reshape(1,2)
-        cov = np.concatenate((y1,y2), axis=0)
-        sigmas.append(cov)
+    sigmas = []
     
+    df = pd.read_csv(infile)
+    values = df.values
     
-    for i in range(0,len(au06)):
-        means.append([au06[i],au12[i]])
+    for i in range(0, values.shape[0]):
+        current_means = values[i].reshape(values[i].shape[0],1)[:-1]
+        current_sigmas = values[i].reshape(values[i].shape[0],1)[-1]
+        temp = current_sigmas[0].split("\n")
+        
+        row_list =[]
+        for j in range(0, len(temp)):
+            row = re.findall(r"[+-]? *(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?", temp[j])
+            y = (np.array(row)).astype(np.float)
+            y = y.reshape(1, len(temp))
+            row_list.append(y)
+        
+        current_sigmas = row_list[0]
+        for j in range(1, len(row_list)):
+            current_sigmas = np.concatenate((current_sigmas, row_list[j]), axis=0)
+            
+               
+        means.append(current_means)
+        sigmas.append(current_sigmas)
+    
     means = np.array(means)
     sigmas = np.array(sigmas)
     print("Cluster centers:\n", means)
@@ -98,24 +99,27 @@ def write_gmm_cluster_sequence(means, sigmas, outfile, targetFile):
     """ uses GMM prediction to print sequence of closest clusters """
     k = means.shape[0]
     features=[' AU06_r',' AU12_r']
-    df = pd.read_csv('example/test.csv')
-    X = df.loc[:,features].dropna().values
-    gmm = mixture.GaussianMixture(n_components=k,
-                                          covariance_type='full',
-                                          tol=1e-8,
-                                          max_iter=1000,
-                                          n_init=3,
-                                          reg_covar=2e-3)
-    gmm.fit(X)
-    gmm.means_ = means
-    gmm.covariances_ =sigmas
     
-    df1 = pd.read_csv(targetFile)
+    df = pd.read_csv(targetFile)
     data = df.loc[:,features].dropna().values
     
-    output = gmm.predict(data)
+    probability_list = []
+    output = []
+    means = means.reshape(means.shape[0],means.shape[1])
+    for i in range(0,k):
+        y = multivariate_normal.pdf(data, means[i], sigmas[i])
+        probability_list.append(y)
+        
+    for i in range(0, probability_list[0].shape[0]):
+        currentMax = 0
+        for j in range(0,len(probability_list)):
+            if(probability_list[j][i]>probability_list[currentMax][i]):
+                currentMax = j
+        output.append(currentMax)
+    output = np.array(output)
+
+    
     with open(outfile, 'w') as f:
-        #f.write(str(gmm.predict(data))[1:-1]) 
         for i in range(0, output.shape[0]):
             f.write(str(output[i])+' ')
         
@@ -146,7 +150,7 @@ if __name__ == '__main__':
     parser.add_argument('-o', help='output_filename, ex:output/test.seq', \
                         type=str, default='output/test_gmm.seq')
     parser.add_argument('-t', help='output_filename, ex:output/test.seq', \
-                        type=str, default='example/test.csv')    
+                        type=str, default='example/targetFile.txt')    
     args = parser.parse_args()
     
     print('args: ', args)
