@@ -197,8 +197,29 @@ class ClusterSearch:
         sorted_counts = sorted(count_dict.items(), key=operator.itemgetter(1))
         total = sum(count_dict.values())
         print(features)
+        percent_dict ={}
         for v,k in sorted_counts:
             print(v ,  ' {:.3}'.format(k/total))
+            temp = float(' {:.3}'.format(k/total))
+            percent_dict[v] = temp
+        zero_list =[]
+        for i in range(0,len(features)):
+            zero_list.append(0)
+        zero_tuple =tuple(zero_list)
+        expected_prob =(1-percent_dict[zero_tuple])/(pow(2, len(features))-1)
+        
+        diff_factor =5
+        
+        high_threshold = diff_factor*expected_prob
+        low_threshold =(1/diff_factor)*expected_prob
+        normalize_factor =1/(1-percent_dict[zero_tuple])
+        
+        print('Difference features')
+        for key in percent_dict:
+            if(key==zero_tuple):
+                continue
+            if(percent_dict[key]*normalize_factor>high_threshold or percent_dict[key]*normalize_factor<low_threshold):
+                print(key, ' ',percent_dict[key])
             
         return    
     
