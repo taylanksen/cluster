@@ -177,14 +177,14 @@ class ClusterSearch:
     def bin_search(s, k_range, features):
         """ Counts all possible binary combinations of features in data. 
         """
-        logging.info('starting bin search' )
-        logging.info('\tfeatures=' + str(features))
+        #logging.info('starting bin search' )
+        #logging.info('\tfeatures=' + str(features))
 
         cluster_list = []
         sil_scores = []
         ch_scores = []
         X = s.df.loc[:,features].dropna().values
-        logging.info('\tX.shape' + str(X.shape))
+        #logging.info('\tX.shape' + str(X.shape))
         count_dict = {}
         for i in list(itertools.product([0, 1], repeat=len(features))):    
             count_dict[i] = 0
@@ -196,31 +196,53 @@ class ClusterSearch:
         
         sorted_counts = sorted(count_dict.items(), key=operator.itemgetter(1))
         total = sum(count_dict.values())
-        print(features)
+        #print(features)
         percent_dict ={}
         for v,k in sorted_counts:
-            print(v ,  ' {:.3}'.format(k/total))
+            #print(v ,  ' {:.3}'.format(k/total))
             temp = float(' {:.3}'.format(k/total))
             percent_dict[v] = temp
         zero_list =[]
         for i in range(0,len(features)):
             zero_list.append(0)
-        zero_tuple =tuple(zero_list)
+            zero_tuple =tuple(zero_list)
         expected_prob =(1-percent_dict[zero_tuple])/(pow(2, len(features))-1)
-        
+    
         diff_factor =5
+
+        normalize_factor =1/(1-percent_dict[zero_tuple])
+        expected_prob = expected_prob*normalize_factor
         
+
         high_threshold = diff_factor*expected_prob
         low_threshold =(1/diff_factor)*expected_prob
-        normalize_factor =1/(1-percent_dict[zero_tuple])
-        
-        print('Difference features')
+        rank_dict_low ={}
+        rank_dict_high ={}
+
+        #print('Interesting features')
         for key in percent_dict:
             if(key==zero_tuple):
                 continue
-            if(percent_dict[key]*normalize_factor>high_threshold or percent_dict[key]*normalize_factor<low_threshold):
-                print(key, ' ',percent_dict[key])
-            
+            if(percent_dict[key]*normalize_factor>high_threshold): 
+                rank_dict_high[key] =percent_dict[key]*normalize_factor/expected_prob
+            if(percent_dict[key]*normalize_factor<low_threshold):
+                if(percent_dict[key] ==0):
+                    rank_dict_low[key] =1000
+                else:
+                    rank_dict_low[key] =expected_prob/(percent_dict[key]*normalize_factor)
+                
+        sorted(rank_dict_low.values())
+        sorted(rank_dict_high.values())
+        
+        if(rank_dict_low):
+            print('low', features)
+            for key in rank_dict_low:
+                print(key, ' ', rank_dict_low[key])
+        if(rank_dict_high):
+            print('high', features)
+            for key in rank_dict_high:
+                print(key, ' ', rank_dict_high[key])        
+        
         return    
     
     #-------------------------------------------
@@ -482,7 +504,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=help_intro)
 
     parser.add_argument('-i', help='inputs, ex:example/*.txt', type=str, 
-                        default='example/test.csv')
+                        default='example/all_frames.csv')
     parser.add_argument('-t', help='type: gmm, km', type=str, 
                         default='km')
     parser.add_argument('-k', help='maximum k', type=int, 
