@@ -472,7 +472,38 @@ class ClusterSearch:
             df_scores.to_csv('output/bic_scores.csv', index_label='k') 
 
 #------------------------------------------------------------------------
+def getCorrelation(file):
+    data =pd.read_csv(file)
+    mdata =np.asarray(data)
+    input_matrix = np.transpose(mdata)
+    cor =np.corrcoef(input_matrix)
+    header =list(data.columns.values)
+    print(cor.shape)
+    cor_dict ={}
+    for i in range(cor.shape[0]):
+        for j in range(cor.shape[1]):
+            if(i==j):
+                continue
+            if(cor[i][j]>0):
+                key_value =header[i]+'&'+header[j]+'_P'
+                cor_dict[key_value] =cor[i][j]
+            if(cor[i][j]<0):
+                key_value =header[i]+'&'+header[j]+'_N'
+                cor_dict[key_value] =cor[i][j]*(-1)
+    sorted_dict = sorted(cor_dict.items(), key=operator.itemgetter(1), reverse=True)
+    print(sorted_dict)
+    
+    outfile = 'Correlation.csv'
+    #(' AU09_r& AU20_r_P', 0.084957599089178437)
+    
+    with open(outfile, 'w', newline='') as csvfile:
+        writer = csv.writer(csvfile)
+        for i in sorted_dict:
+            writer.writerows([[i]])
+    print('done')
+#------------------------------------------------------------------------
 def do_all(args):
+    getCorrelation(args.i)
     c_search = ClusterSearch(args.i)    
     
     features=['AU06_r','AU12_r']
