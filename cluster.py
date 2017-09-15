@@ -9,7 +9,8 @@
     clusters_k.csv
     clusters_k.png
     scores.csv 
-
+ 
+    Correlation.csv (for all)
   example:
       $ python -i 'example/test.csv'
 ------------------------------------------------------------------------
@@ -199,7 +200,7 @@ class ClusterSearch:
         #print(features)
         percent_dict ={}
         for v,k in sorted_counts:
-            #print(v ,  ' {:.3}'.format(k/total))
+            print(v ,  ' {:.3}'.format(k/total))
             temp = float(' {:.3}'.format(k/total))
             percent_dict[v] = temp
         zero_list =[]
@@ -482,7 +483,10 @@ def getCorrelation(file):
     cor_dict ={}
     for i in range(cor.shape[0]):
         for j in range(cor.shape[1]):
-            if(i==j):
+            if(i>=j):
+                continue
+            # if either is an _r skip it 
+            if(('_r' in header[i]) or ('_r' in header[j])):
                 continue
             if(cor[i][j]>0):
                 key_value =header[i]+'&'+header[j]+'_P'
@@ -491,16 +495,16 @@ def getCorrelation(file):
                 key_value =header[i]+'&'+header[j]+'_N'
                 cor_dict[key_value] =cor[i][j]*(-1)
     sorted_dict = sorted(cor_dict.items(), key=operator.itemgetter(1), reverse=True)
-    print(sorted_dict)
-    
-    outfile = 'Correlation.csv'
+    #print(sorted_dict)
+ 
+    outfile = 'output/Correlation.csv'
     #(' AU09_r& AU20_r_P', 0.084957599089178437)
     
     with open(outfile, 'w', newline='') as csvfile:
         writer = csv.writer(csvfile)
         for i in sorted_dict:
             writer.writerows([[i]])
-    print('done')
+    print('writing output/Correlation.csv complete')
 #------------------------------------------------------------------------
 def do_all(args):
     getCorrelation(args.i)
@@ -520,10 +524,13 @@ def do_all(args):
     elif args.t == 'gmm':
         c_search.feature_search(features, range(1,args.k+1), max_d, c_search.gmm_search)
     elif args.t == 'bin':
-        features=['AU01_c','AU02_c','AU05_c', 'AU06_c','AU07_c','AU09_c',\
+        features=[ \
+        #   'AU09_c', 'AU20_c']
+                  'AU01_c','AU02_c','AU05_c', 'AU06_c','AU07_c','AU09_c',\
                   'AU10_c','AU12_c','AU14_c','AU15_c','AU17_c','AU20_c',\
                   'AU23_c','AU25_c','AU26_c','AU45_c']    
         c_search.feature_search(features, range(1,args.k+1), 3, c_search.bin_search)
+        #c_search.feature_search(features, range(1,args.k+1), 2, c_search.bin_search)
         
     
 #------------------------------------------------------------------------
@@ -536,7 +543,7 @@ if __name__ == '__main__':
 
     parser.add_argument('-i', help='inputs, ex:example/*.txt', type=str, 
                         default='example/all_frames.csv')
-    parser.add_argument('-t', help='type: gmm, km', type=str, 
+    parser.add_argument('-t', help='type: gmm, km, bin', type=str, 
                         default='km')
     parser.add_argument('-k', help='maximum k', type=int, 
                         default=6)
