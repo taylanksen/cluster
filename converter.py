@@ -1,16 +1,31 @@
 #!/usr/bin/env python
-"""
-------------------------------------------------------------------------
 
-------------------------------------------------------------------------
 """
+----------------------------------------------------------------------------------
+Converts folders of raw data into cluster index sequences for each witness datafile
+in the folder, based on an input cluster defintion as well as type of conversion.
+Listening and speaking types utilize the dialog transcript to isolate each question
+and generate a sequence for each question, as opposed to one for the whole interview.
+
+Valid Types: - default   (no restrictions)
+             - changes   (only when cluster index changes)
+             - listening (sequence for each question, while witness is listening)
+             - speaking  (sequence for each question, while witness is speaking)
+             
+
+Usage: './converter.py -t Type -c ClusterDefinition -d DataFolder -s SampleRate'
+
+Ex: './converter.py -t default -c km_5.csv -d OpenFace -s 5'
+    Writes resulting cluster index files to 'cluster_seq/km_5/default/every_5_frames'
+    inside truthers and bluffers subfolders for each witness file in OpenFace folder.
+
+----------------------------------------------------------------------------------
+"""
+
 from __future__ import print_function
-import csv
 import numpy as np
 import pandas as pd
 from sklearn import cluster
-
-import matplotlib.pyplot as plt
 
 import glob
 import os
@@ -24,92 +39,236 @@ logging.basicConfig(level=logging.DEBUG)
 #   --log=INFO
 
 
-#------------------------------------------------------------------------
+"""
+Contains methods to load cluster definitions and data files and write the 
+resulting cluster index sequence. Below this class, wrapper functions utilize
+ClusterConverter to act on the whole dataset.
+"""
 class ClusterConverter:
-    """ """
+   
+    """ Loads a cluster file into a df """
     def load_cluster(s, infile):
-        """ loads a cluster file into a df """
-        print("Reading cluster definition from: {}".format(infile))
+        print('Reading cluster definition from: {}'.format(infile))
         df = pd.read_csv(infile, skipinitialspace=True)
         s.cluster_def = df # Cluster definition as a dataframe
-        print("Cluster Centers: \n", df)
+        
+        k = s.cluster_def.shape[0] # k is the number of clusters
+        s.k_means = cluster.KMeans(n_clusters=k, max_iter=2000, n_init=10)
+        s.k_means.cluster_centers_ = s.cluster_def # Set the cluster centers
+        # TODO: Compatibility with GMM not just k_means
     
-    def load_data_sequence(s, infile):
-        """ loads sequence of selected features into a df """
-        print('Reading data sequence from: {}'.format(infile))
+    """ Loads sequence of selected features into a df """
+    def load_data_sequence(s, infile, sample_rate=1):
+        logging.info('Reading data sequence from: {}'.format(infile))
         # Read the infile for only the features designated by cluster_def
         df = pd.read_csv(infile, skipinitialspace=True, usecols=list(s.cluster_def))
-        s.data = df[::15] # Dataframe for the data points - ONLY USES EVERY 15'th FRAME
-    
+        s.data = df[::sample_rate] # Dataframe for the data points
+        # Only samples every 'sample_rate' frames
+   
+    """ Uses KMeans prediction to print sequence of closest clusters """
     def write_cluster_sequence(s,outfile):
-        """ uses KMeans prediction to print sequence of closest clusters """
-        k = s.cluster_def.shape[0] # k is the number of clusters
-        k_means = cluster.KMeans(n_clusters=k, max_iter=2000, n_init=10)
-        k_means.cluster_centers_ = s.cluster_def # Set the cluster centers
-        
+        # TODO: Compatibility with GMM not just k_means
+    
         np.set_printoptions(threshold=np.inf) # So it prints whole array, w/o ...
-        
         # Predict the closest cluster for the sequence entries and write to file
         with open(outfile, 'w+') as f:
-            f.write(str(k_means.predict(s.data))[1:-1]) #[1:-1] to remove the '[]'
+            f.write(str(s.k_means.predict(s.data))[1:-1]) #[1:-1] to remove the '[]'
 
-        print('Cluster Index Sequnce written to: {}'.format(outfile))
-    
+        logging.info('Cluster Index Sequnce written to: {}'.format(outfile))
+
+    """ Converts the passed frames from s.data based on s.k_means """
+    def convert_seq(s, frames):
+        # TODO: Compatibility with GMM not just k_means
+        
+        np.set_printoptions(threshold=np.inf) # So it prints whole array, w/o ...
+        #print(frames[0], frames[1], len(s.data))	    
+        frames_included = s.data.iloc[frames[0]:frames[1]]
+        #print(frames_included)
+        return s.k_means.predict(frames_included)
+
+    """ Only writes when the cluster has changed """
+    def write_cluster_sequence_changes(s,outfile):
+
+        np.set_printoptions(threshold=np.inf) # So it prints whole array, w/o ...
+
+        seq = s.k_means.predict(s.data) # Run k_means.predict to find closest clusters
+        
+        # just_changes = Cluster indices only where the cluster changes
+        just_changes = []
+        last = -1
+        for entry in seq:
+            if entry != last:
+                just_changes.append(entry)
+                last = entry
+        just_changes = np.array(just_changes)
+
+        # Write to file
+        with open(outfile, 'w+') as f:
+            f.write(str(just_changes)[1:-1]) #[1:-1] to remove the '[]'
+
+        logging.info('Cluster Changes Sequence written to: {}'.format(outfile))
+        
+
+    """ Writes the cluster sequence for an answer to its outfile """
+    def write_seq(s, seq, outfile):
+        with open(outfile, 'w+') as f:
+            f.write(str(seq)[1:-1]) #[1:-1] to remove the '[]'        
+            
 #------------------------------------------------------------------------
+# ------------------ End of ClusterConverter class ----------------------
+#------------------------------------------------------------------------
+
+
+#------------------------------------------------------------------------
+""" Converts a single sequence, not a folder of sequences ('deprecated') """
 def do_all(args):
     cluster_converter = ClusterConverter()    
     cluster_converter.load_cluster(args.c)
-    cluster_converter.load_data_sequence(args.d)
+    cluster_converter.load_data_sequence(args.d, args.s)
     cluster_converter.write_cluster_sequence(args.o)
 
 #------------------------------------------------------------------------
-def convert_all(args):
-    """  Converts all files with '-W-' in the name from args.d folder
-    into args.o folder, inside a 'truthers' or 'bluffers' subfolder
-    and replacing 'csv' with 'seq'  """
-    
-    args.d = 'example/test_input' # TODO: Pass the desired infolder name as args.d
-    args.o = 'example/test_output' # TODO: Pass the desired outfolder name as args.o
-    #args.c = '/public/tsen/clusterResults/km_all_k15_d2/face_clusters_AU06_r_AU12_r_5.csv'    
-    #args.d = '/public/tsen/OpenFace'
-    
-    # Make sure output folder and subfolders exist
-    os.makedirs(args.o, exist_ok=True)
-    os.makedirs(args.o + '/truthers', exist_ok=True)
-    os.makedirs(args.o + '/bluffers', exist_ok=True)
-   
+"""
+Converts all files with '-W-' in the name from args.d folder into outfile folders
+(inside either a 'truthers' or 'bluffers' subfolder) replacing .csv with .seq
+"""
+def convert_all(args, outfolder):
+
     cluster_converter = ClusterConverter()
     cluster_converter.load_cluster(args.c) # Load cluster definition
-    
+
     # Convert all Witness files to cluster sequences
     for name in glob.glob(args.d + '/*'):
-        if('-W-' in name): # Only want Witness data
-            cluster_converter.load_data_sequence(name)            
-            if('-T-' in name): # Truth-Teller
-                outfile = name.replace(args.d,args.o+'/truthers').replace('csv','seq')                
-            if('-B-' in name): # Bluffer
-                outfile = name.replace(args.d,args.o+'/bluffers').replace('csv','seq')                
-            cluster_converter.write_cluster_sequence(outfile)
+        if '-W-' in name: # Only want Witness data
+            cluster_converter.load_data_sequence(name, args.s) # Load data at given sample rate         
+            if '-T-' in name: # Truth-Teller
+                outfile = name.replace(args.d,outfolder+'/truthers').replace('csv','seq')                
+            if '-B-' in name: # Bluffer
+                outfile = name.replace(args.d,outfolder+'/bluffers').replace('csv','seq')    
+           
+            if args.t == 'changes': # Only writes when cluster changes
+                cluster_converter.write_cluster_sequence_changes(outfile)
+            else:
+                cluster_converter.write_cluster_sequence(outfile)
+            
+#------------------------------------------------------------------------
+"""
+Converts each question as its own sequence using dialog transcripts and OpenFace data files
+Uses args.t to determine whether to convert when witness is speaking or when they're listening
+"""
+def convert_with_transcripts(args, outfolder):   
+
+    cluster_converter = ClusterConverter()
+    cluster_converter.load_cluster(args.c) # Load cluster definition
+
+    sequences = {} # sequences[fileName] = [[startAnswer1Frame,endAnswer1Frame]...]
+    # ie. sequences['2016-03-03_18-01-50-492'] = [[10,26],[40,67]...]    
+
+    for name in glob.glob('transcripts/*'):
+        # Returns array of arrays of the frame numbers for each answer
+        ranges = get_ranges(name, is_listening=args.t=='listening')
+        sequences[name[:-4].split('/')[1]] = ranges # The ranges of frames to convert to sequences from the corresponding OpenFace
+        # [:-4] removes the '.csv' and split removes 'transcripts/'
+
+    for name in glob.glob(args.d + '/*'):
+        if '-W-' in name:  # For each witness data file 
+            for t_name in sequences: # Find the transcript for that interview
+                if t_name in name:
+                    # Data needs to be samples every frame for compatibility with transcript data
+                    cluster_converter.load_data_sequence(name, 1)       
+                    for i in range(len(sequences[t_name])): # For each answer...
+                        frame_seq = sequences[t_name][i]
+                        if frame_seq[1] >= frame_seq[0]: # Occasionally they're labeled wrong, ignore these
+                            cluster_seq = cluster_converter.convert_seq(frame_seq) # Converts a sequence for this answer
+                            if '-T-' in name:
+                                outfile = name.replace(args.d,outfolder+'/truthers').replace('.csv','-A'+str(i)+'.seq')  
+                            elif '-B-' in name:
+                                outfile = name.replace(args.d,outfolder+'/bluffers').replace('.csv','-A'+str(i)+'.seq')                                            
+                            # Applies the sample rate here, since needed all data to be in sync w transcript
+                            cluster_converter.write_seq(cluster_seq[::args.s], outfile) # Write the cluster sequence to outfile
+                    break # Don't need to check remaining transcripts, found the one we want
+
+#------------------------------------------------------------------------
+""" 
+Parses the transcript file to isolate each question, returns a list of
+[start_frame, end_frame] pairs (one for each non-baseline question).
+"""
+def get_ranges(t_name, is_listening=True):
+    answer_frames = []
+    df = pd.read_csv(t_name, skipinitialspace=True)
+    for i, row in df.iterrows():
+        if i > 5: # Skip the baseline questions
+            try:
+                if is_listening: # For when listening
+                    start_frame = get_frame(float(row[0])) - 1
+                    end_frame = get_frame(float(row[1])) + 1
+                else: # For when speaking
+                    start_frame = get_frame(float(row[0])) - 1
+                    end_frame = get_frame(float(row[1])) + 1                 
+                answer_frames.append([start_frame,end_frame])
+            except ValueError as er:
+                print('ERROR in',t_name,er)
+    return answer_frames
+
+#------------------------------------------------------------------------
+"""
+Helper function - converts transcript's time format to frame number
+Frame number from Min.Sec format (i.e. 1.52 is 1 min, 52 seconds)
+"""
+def get_frame(x):
+    # TotalSeconds = (Decimal for seconds * 100) + (Number of Minutes * 60)
+    # FrameNumber  = TotalSeconds * 15 fps
+    return int((((x%1) * 100) + ((x-(x%1)) * 60)) * 15) # Math!
+
+
 
 
 #------------------------------------------------------------------------
+# Main Method - Parse CL args, create output folders, call converter function
+#------------------------------------------------------------------------
 if __name__ == '__main__':
 
-    # Setup commandline parser
-    help_intro = 'Program for converting a seq datafile into a seq of cluster indices.' 
+    # Command line argument parser - can use -h or --help flags to show usage
+    help_intro = 'Program for converting seq datafiles into seqs of cluster indices.' 
     parser = argparse.ArgumentParser(description=help_intro)
-
-    parser.add_argument('-c',help='cluster_file, ex:example/face_clusters.csv',\
-                        type=str, default='example/face_clusters_AU06_r_AU12_r_4.csv')
-    parser.add_argument('-d', help='data_file, ex:example/test.csv', \
-                        type=str, default='example/test.csv')
-    parser.add_argument('-o', help='output_filename, ex:output/test.seq', \
-                        type=str, default='output/test.seq')
+    # -c = ClusterDefinition: Path to cluster definition file (csv)
+    parser.add_argument('-c', type=str, metavar='cluster_def', 
+                help='Cluster definition file, ex:example/face_clusters_AU06_r_AU12_r_4.csv',  
+                default='/public/tsen/clusterResults/km_all_k15_d2/face_clusters_AU06_r_AU12_r_5.csv')
+    # -d = DataFolder: Folder containing raw data files from OpenFace
+    parser.add_argument('-d', metavar='data_file', help='Input OpenFace data folder, ex:example/testData', \
+                        type=str, default='/public/tsen/OpenFace')
+    # -t = Type: possible options = (default | changes | listening | speaking) 
+    parser.add_argument('-t', help='Conversion Type (default|changes|listening|speaking)', 
+                        default='default', type=str, metavar='type')
+    # -s = SampleRate: Samples every X frames of the data (raw data is 15 fps)
+    parser.add_argument('-s', help='Sample Rate, data sampled every X frames', 
+                        metavar='sample_rate', type=int, default=1)
     args = parser.parse_args()
     
-    print('args: ', args)
-
-    #do_all(args)
-    convert_all(args)
+    
+    # TODO: Only works for KMeans cluster definition files
+    # Build outfolder path (ex: cluster_seq/KM_AU06_r_AU12_r_5/default/every_frame)
+    outfolder = 'cluster_sequences/KM_' + args.c.split('.')[0].split('face_clusters_')[1] + '/' + args.t
+    if args.t != 'changes': # Append folder name for sample rate (unless type is changes)
+        if args.s == 1:
+            outfolder += '/every_frame'
+        else:
+            outfolder += '/every_{}_frames'.format(args.s)
+    else:
+        args.s = 1 # Changes only can't have a sample rate (logically doesn't make sense)
+    print('Outfolder = ' + outfolder)
+    
+    # Set up directories - make them or clean them up if they already exist
+    try: os.makedirs(outfolder+'/truthers') 
+    except: map(os.remove, glob.glob(outfolder+'/truthers/*.seq'))
+    try: os.makedirs(outfolder+'/bluffers') 
+    except: map(os.remove, glob.glob(outfolder+'/bluffers/*.seq'))    
+        
+    # Call proper function to convert to cluster index sequences
+    if args.t in ['speaking', 'listening']:
+        convert_with_transcripts(args, outfolder)
+    else:
+        convert_all(args, outfolder)
+        
     logging.info('PROGRAM COMPLETE')
-
