@@ -39,30 +39,59 @@ import os
 import sys
 import argparse
 import logging
+logging.basicConfig(level=logging.DEBUG)
+log = logging.getLogger(__name__)
 
 from collections import defaultdict
 from itertools import combinations
 import itertools
 
-logging.basicConfig(level=logging.DEBUG)
 # you can set the logging level from a command-line option such as:
 #   --log=INFO
 
 
 #-------------------------------------------------------------------------------
 class ClusterSearch:
-    """ """
+    """ 
+    
+    public methods:
+    :ClusterSearch(inputfile) - specify file containing openface frames
+    :feature_search - runs clustering for subsets of specified features, k_range 
+    
+    :k_search   - runs sklearn kmeans over range of k values
+    :gmm_search - runs sklearn gmm over range of k
+    :bin_search - counts frequencies for all possible binary subsets
+    
+    :write_clusters
+    :write_scores
+    :write_plots
+    """
+    CONFIDENCE_TOL = 0.90  # only faces with confidence >= will be used
     
     def __init__(s, infile):
-        s.df = pd.read_csv(infile, skipinitialspace=True) 
+        log.info('...loading data')
+        if 'pkl' in infile:
+            s.df = pd.read_pickle(infile)
+        else:
+            s.df = pd.read_csv(infile, skipinitialspace=True) 
         
+        # remove bad confidence
+        if 'confidence' in s.df.columns:
+            s.df = s.df[s.df['confidence'] >= ClusterSearch.CONFIDENCE_TOL]
+        else:
+            log.info.warning('No confidence column, using all datapoints')
+
+        log.info('...data loaded')
+
+            
     #-------------------------------------------
     def feature_search(s, features, k_range, max_dim, f_search):
-        """ runs k_search for all permutations of features
+        """ runs f_search within k_range for all subsets of features up 
+        to max_dim. Output results are saved by f_search.
         """
         
         for num_features in range(1, max_dim+1):
-            feature_combo_list = list(combinations(features,num_features))        
+            feature_combo_list = list(combinations(features, num_features))        
             for feature_subset in feature_combo_list:
                 f_search(k_range, feature_subset)
                 
@@ -79,9 +108,13 @@ class ClusterSearch:
         ch_scores = []
         X = s.df.loc[:,features].dropna().values
         logging.info('\tX.shape' + str(X.shape))
+        score_fname = 'output/scores_' + \
+            '_'.join(features).replace(' ','')+ '.csv'
         for k in k_range:
             png_fname = 'output/clusters_' + '_'.join(features).replace(' ','')\
                 + '_' + str(k) + '.png'
+            cluster_fname = 'output/face_clusters_' + \
+                '_'.join(features).replace(' ','') + '_' + str(k) + '.csv'
             if os.path.isfile(png_fname):
                 logging.info('file exists, skipping...' + png_fname)
                 continue
@@ -101,24 +134,23 @@ class ClusterSearch:
             clusters = k_means.cluster_centers_
                 
             # write the clusters to a csv file
-            cluster_fname = 'output/face_clusters_' + \
-                '_'.join(features).replace(' ','') + '_' + str(k) + '.csv'
             s.write_clusters(cluster_fname, features, clusters)
             subtitle = 'sil score: ' + '{:.3f}'.format(sil_score)
             subtitle += ', CH score: ' + '{:.2E}'.format(ch_score)
             s.write_plots(png_fname, features, X,[clusters], subtitle)  
-            s.write_scores(features, [k], [sil_score], [ch_score])
+            s.write_scores(score_fname, features, [k], [sil_score], [ch_score])
 
             cluster_list.append(clusters)
             sil_scores.append(sil_score)
             ch_scores.append(ch_score)
-
+        
         if len(cluster_list) > 1:
             k_start = cluster_list[0].shape[0]
             k_end = cluster_list[-1].shape[0]
             fname = 'output/clusters_' + '_'.join(features).replace(' ','') + '_R' + \
                                     str(k_start) + 'to' + str(k_end) + '.png'
-            s.write_plots(fname, features, X, cluster_list)
+            s.save_score_plot(score_fname.replace('.csv','.png'), k_range, ch_scores)
+            
         
         return sil_scores, ch_scores
     
@@ -127,8 +159,8 @@ class ClusterSearch:
         """ Runs GMM, saves medioid file, saves plot file.
             returns silhoutte and Calinski scores 
         """
-        logging.info('starting cluster search' )
-        logging.info('\tfeatures=' + str(features))
+        log.info('starting cluster search' )
+        log.info('\tfeatures=' + str(features))
 
         bic_scores = []
         X = s.df.loc[:,features].dropna().values
@@ -136,14 +168,14 @@ class ClusterSearch:
             X_ = X[~(X == 0).all(1)] # drop any rows with all zero
         else:
             X_ = X
-        logging.info('\tX.shape' + str(X.shape))
+        log.info('\tX.shape' + str(X.shape))
         for k in k_range:
             png_fname = 'output/gmm_' + '_'.join(features).replace(' ','')\
                 + '_' + str(k) + '.png'
             if os.path.isfile(png_fname):
-                logging.info('file exists, skipping...' + png_fname)
+                log.info('file exists, skipping...' + png_fname)
                 continue
-            logging.info('\tk=' + str(k) )
+            log.info('\tk=' + str(k) )
             #k_means = cluster.KMeans(n_clusters=k, max_iter=1000, n_jobs=-1)
             gmm = mixture.GaussianMixture(n_components=k,
                                           covariance_type='full',
@@ -155,7 +187,7 @@ class ClusterSearch:
                                           reg_covar=2e-6)            
             gmm.fit(X_)
             bic = gmm.bic(X_)  
-            logging.info('bic with ' + str(k) + ' clusters: ' + \
+            log.info('bic with ' + str(k) + ' clusters: ' + \
                              '{0:.3f}'.format(bic))
                 
             # write the clusters to a csv file
@@ -177,14 +209,14 @@ class ClusterSearch:
     def bin_search(s, k_range, features):
         """ Counts all possible binary combinations of features in data. 
         """
-        logging.info('starting bin search' )
-        logging.info('\tfeatures=' + str(features))
+        log.info('starting bin search' )
+        log.info('\tfeatures=' + str(features))
 
         cluster_list = []
         sil_scores = []
         ch_scores = []
         X = s.df.loc[:,features].dropna().values
-        logging.info('\tX.shape' + str(X.shape))
+        log.info('\tX.shape' + str(X.shape))
         count_dict = {}
         for i in list(itertools.product([0, 1], repeat=len(features))):    
             count_dict[i] = 0
@@ -311,6 +343,20 @@ class ClusterSearch:
 
         return sil_score_avg
         
+        
+    #-------------------------------------------
+    def save_score_plot(s, score_fname, k_range, ch_scores):
+        """ Save png files for plots of data with clusters.
+            TODO: plot tsne when d > 2.
+        """
+        plt.plot(k_range, ch_scores)
+        plt.xlabel('# clusters')
+        plt.ylabel('CH score')
+        plt.title('CH scores ' + score_fname)
+        plt.savefig(score_fname)
+        plt.close()
+        
+        
     #-------------------------------------------
     def write_plots(s, fname, header, data, cluster_list,  subtitle=None):
         """ Save png files for plots of data with clusters.
@@ -402,18 +448,18 @@ class ClusterSearch:
         plt.close()
             
     #-------------------------------------------
-    def write_scores(s, features, k_range, sil_scores, ch_scores):
+    def write_scores(s, score_fname, features, k_range, sil_scores, ch_scores):
         df_scores= pd.DataFrame.from_items([
             ('features', '_'.join(features).replace(' ','')),
             ('sil score', sil_scores),
             ('CH score', ch_scores)])
         df_scores.index = k_range[0:len(sil_scores)]
         # append to score file if exists, otherwise create new
-        if os.path.isfile('output/scores.csv'):
-            with open('output/scores.csv', 'a') as f:
+        if os.path.isfile(score_fname):
+            with open(score_fname, 'a') as f:
                 df_scores.to_csv(f, header=False,index_label='k')        
         else:
-            df_scores.to_csv('output/scores.csv', index_label='k')        
+            df_scores.to_csv(score_fname, index_label='k')             
 
     #-------------------------------------------
     def write_bics(s, features, k_range, bics):
@@ -430,47 +476,51 @@ class ClusterSearch:
 
 #------------------------------------------------------------------------
 def do_all(args):
-    c_search = ClusterSearch(args.i)    
-    
-    features=['AU06_r','AU12_r']
-    #features=['AU01_r','AU02_r','AU05_r', 'AU06_r','AU07_r','AU09_r',\
-    #          'AU10_r','AU12_r','AU14_r','AU15_r','AU17_r','AU20_r',\
-    #          'AU23_r','AU25_r','AU26_r','AU45_r']
     if not os.path.isdir('output'):
         os.mkdir('output')
-    max_d = 2
-    #c_search.k_search(k_range,features)
-    #c_search.gmm_search(range(1,16),features)
+
+    c_search = ClusterSearch(args.i)    
+    
+    features=['AU12_r','AU14_r']
+    # all features:
+    #features=['AU01_r','AU02_r','AU04_r', 'AU05_r', 'AU06_r','AU07_r','AU09_r',\
+    #          'AU10_r','AU12_r','AU14_r','AU15_r','AU17_r','AU20_r',\
+    #          'AU23_r','AU25_r','AU26_r','AU45_r']
+    # smile features:
+    #features=['AU06_r','AU07_r',\
+    #          'AU10_r','AU12_r','AU14_r']
+    max_d = 3
+
     if args.t == 'km':
         c_search.feature_search(features, range(2,args.k+1), max_d, c_search.k_search)
     elif args.t == 'gmm':
         c_search.feature_search(features, range(1,args.k+1), max_d, c_search.gmm_search)
     elif args.t == 'bin':
-        features=['AU01_c','AU02_c','AU05_c', 'AU06_c','AU07_c','AU09_c',\
-                  'AU10_c','AU12_c','AU14_c','AU15_c','AU17_c','AU20_c',\
-                  'AU23_c','AU25_c','AU26_c','AU45_c']    
-        c_search.feature_search(features, range(1,args.k+1), 3, c_search.bin_search)
-        
+        features=['AU01_c','AU02_c','AU04_c','AU05_c', 'AU06_c','AU07_c',\
+                  'AU09_c','AU10_c','AU12_c','AU14_c','AU15_c','AU17_c',\
+                  'AU20_c','AU23_c','AU25_c','AU26_c','AU45_c']
+        c_search.feature_search(features, range(1,args.k+1), 3, c_search.bin_search)        
     
 #------------------------------------------------------------------------
 if __name__ == '__main__':
 
     # Setup commandline parser
-    help_intro = 'Program for counting clustering variants.' 
-    #help_intro += ' example usage:\n\t$ ./avg_master.py -i \'example/*_openface.txt\''
+    help_intro = 'Program for running clustering on features subsets.'
+    help_intro += '  example usage:\n\t$ ./cluster.py -i \'example/test.csv\''
+    help_intro += ' -t gmm -k 6'
     parser = argparse.ArgumentParser(description=help_intro)
 
-    parser.add_argument('-i', help='inputs, ex:example/*.txt', type=str, 
+    parser.add_argument('-i', help='inputs, ex:example/test.csv', type=str, 
                         default='example/test.csv')
     parser.add_argument('-t', help='type: gmm, km', type=str, 
                         default='km')
     parser.add_argument('-k', help='maximum k', type=int, 
-                        default=6)
+                        default=14)
     
     args = parser.parse_args()
     
     print('args: ', args.i)
 
     do_all(args)
-    logging.info('PROGRAM COMPLETE')
+    log.info('PROGRAM COMPLETE')
 
