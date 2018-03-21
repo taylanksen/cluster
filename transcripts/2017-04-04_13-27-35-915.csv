@@ -1,0 +1,35 @@
+0.5,0.52,What type of computer system are you using?,0.53,0.54,Windows.
+0.57,0.59,Please tell me whether I am wearing glasses or not.,1,1.01,You are not wearing glasses.
+1.05,1.07,What color clothes did you wear yesterday?,1.11,1.12,ink. Pink and blue.
+1.13,1.15,What is twelve plus nineteen?,1.16,1.17,Thirty one.
+1.19,1.22,"Did you ever steal anything in your whole life, and if so, what was it?",1.23,1.26,Drinks from the Starbucks Tapingo line.
+1.31,1.32,What was your image?,1.33,1.34,Ah. It's a chocolate cake.
+1.39,1.41,Could you give me some more details about the image?,1.45,2.02,"It was on a circular plate,  and was in the kitchen, with ah, the fork and knife next to it. It happened to be brown."
+2.05,2.08,If there were something to count in the image. What would it be? What would be the count?,2.09,2.1,The layers of the cake.
+2.12,2.13,How many layers?,2.14,2.14,Ah. Three.
+2.19,2.22,Are there any other objects in the image?,2.23,2.3,Ah. The fork and the knife and the plate. 
+2.26,2.27,And the kitchen?,2.28,2.3,And the kitchen but it doesn't count an object.
+2.31,2.32,What are the colors in the image?,2.33,2.35,"Well, the cake is brown. "
+2.36,2.37,What shade of brown?,2.38,2.47,What shade? Combat brown. Ah. The tensiles are silver. The plate was white.
+2.49,2.49,Just white?,2.5,2.51,"Yeah, no pattern."
+2.56,2.57,How did you know it was in a kitchen?,3.01,3.03,Because there was an oven in the background.
+3.04,3.05,What color was oven?,3.06,3.06,Black.
+3.12,3.13,Where was the oven in the background?,3.14,3.15,Next to the sink. To the left.
+3.16,3.16,What color was the sink?,3.2,3.21,Silver.
+3.27,3.29,Was it a cabinet? Or was it just like?,3.31,3.31,No cabinets.
+3.44,3.46,So there was no cabinet. So the sink was just floating in the air?,3.47,3.48,"No, it's connected by a countertop."
+3.49,3.5,What color was the countertop?,3.53,4,Ah. Like a granite. It's silvery.
+3.57,3.58,What color was the material?,3.59,4,Was silvery.
+4.01,4.01,What kind of silver?,4.02,4.02,Grey. 
+4.03,4.05,Sort of brown tan color?,4.06,4.06,Sure.
+4.12,4.13,Did the cake have frosting?,4.14,4.14,Yes.
+4.15,4.16,"If so, what color?",4.18,4.19,Whiten.
+4.2,4.21,But you said it was a brown cake.,4.22,4.25,On the inside. It was just a slice.
+4.26,4.28,"So it wasn't a cake, it was a slice of cake?",4.3,4.31,Cut out of the bigger cake.
+4.34,4.36,Was the bigger cake there?,4.37,4.37,Yeah. 
+4.37,4.39,Why don't you describe that earlier?,4.42,4.47,Didn't realize that was an important object.
+4.48,5.02,Could you see on which surface the plate was on?,5.03,5.06,"On the same kind of counter, countertop."
+5.07,5.08,So it was on a countertop?,5.09,5.12,Yeah. The plate was on the countertop.
+5.21,5.25,So describe the kitchen set up then if you could see the cabinet and the stove and the sink.,5.27,5.31,Stove to the left. A little piece of countertop connected to the sink.
+5.32,5.33,You said the sink was a little off?,5.34,5.34,Yeah. 
+5.35,5.36,But you said the stove.,5.38,5.39,The stove was all the way to the right.
