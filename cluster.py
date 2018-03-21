@@ -481,7 +481,7 @@ def do_all(args):
 
     c_search = ClusterSearch(args.i)    
     
-    features=['AU12_r','AU14_r']
+    features=['AU06_r','AU12_r']
     # all features:
     #features=['AU01_r','AU02_r','AU04_r', 'AU05_r', 'AU06_r','AU07_r','AU09_r',\
     #          'AU10_r','AU12_r','AU14_r','AU15_r','AU17_r','AU20_r',\
@@ -511,7 +511,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=help_intro)
 
     parser.add_argument('-i', help='inputs, ex:example/test.csv', type=str, 
-                        default='example/test.csv')
+                        default='test/test.csv')
     parser.add_argument('-t', help='type: gmm, km', type=str, 
                         default='km')
     parser.add_argument('-k', help='maximum k', type=int, 

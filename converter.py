@@ -1,7 +1,12 @@
 #!/usr/bin/env python
 """
 ------------------------------------------------------------------------
-
+input:
+  face_clusters.csv
+  openface_data.csv
+  
+output:
+  cluster_seq.seq
 ------------------------------------------------------------------------
 """
 from __future__ import print_function
