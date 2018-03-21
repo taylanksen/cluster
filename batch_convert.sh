@@ -1,11 +1,21 @@
 #!/bin/bash
+#SBATCH --partition=standard --time=02:00:00
+#SBATCH -c 24
 
 # Takes cluster definition file and input data folder and generates cluster index sequences 
 # for each type (default|listening|speaking|changes) at various sample rates (1,3,5,10,15,20)
 # using converter.py with varying arguments.
 
-# Usage: ./batch_convert.sh cluster_defintion input_data_folder
+# Usage: 
+#     python batch_convert.sh cluster_defintion input_data_folder
+#         To run with custom input on interactive node.
+#     sbatch batch_convert.sh 
+#         To run with default params on a compute node. 
+
 # (defaults to the same defaults as converter.py if no arguments given)
+
+module load python
+module load anaconda
 
 # Permutations to run
 sample_rates=( 1 3 5 10 15 20 ) # Sample Rates
@@ -21,9 +31,10 @@ if [[ $# == 2 ]]; then
 	data_folder=$2
 fi
 
-# Confirm arguments -- (y/n) to continue or cancel
-printf "Continue with:\n\tdata_folder = $data_folder\n\tcluster_def = $cluster_def\n\nContinue? (y/n) "
-read decision
+# # Confirm arguments -- (y/n) to continue or cancel
+# printf "Continue with:\n\tdata_folder = $data_folder\n\tcluster_def = $cluster_def\n\nContinue? (y/n) "
+# read decision
+decision="y"
 
 if [[ "$decision" == "y" || "$decision" == "Y" ]]; then
 	echo "Beginning conversions to cluster index sequences..."
