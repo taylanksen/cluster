@@ -13,9 +13,9 @@ Valid Types: - default   (one sequence for the entire interview)
              - speaking  (sequence for each question, while witness is speaking)
              
 
-Usage: './converter.py -t Type -c ClusterDefinition -d DataFolder -s SampleRate'
+Usage: './converter.py -t Type -c ClusterDefinition -d DataFolder -s SampleRate -r TranscriptFolder'
 
-Ex: './converter.py -t default -c km_5.csv -d OpenFace -s 5'
+Ex: './converter.py -t default -c km_5.csv -d OpenFace -s 5 -r transcripts'
     Writes resulting cluster index files to 'cluster_sequences/km_5/default/every_5_frames'
     inside truthers and bluffers subfolders for each witness file in OpenFace folder.
 
@@ -66,8 +66,13 @@ class ClusterConverter:
     def load_data_sequence(s, infile, start_frame=0, sample_rate=1):
         logging.debug('Reading data sequence from: {}'.format(infile))
         # Read the infile for only the features designated by cluster_def
-        df = pd.read_csv(infile, skipinitialspace=True, usecols=list(s.cluster_def))
-        s.data = df[start_frame::sample_rate] # Dataframe for the data points
+        df = pd.read_csv(infile, skipinitialspace=True, usecols=list(s.cluster_def)+['confidence'])
+        #s.data = df[start_frame::sample_rate, list(s.cluster_def)] # Dataframe for the data points
+        #s.confidence = df[start_frame::sample_rate, ['confidence']] # DataFrame for the confidence levels
+        s.data = df.loc[start_frame::sample_rate, list(s.cluster_def)]
+        confidence = df.loc[start_frame::sample_rate, ['confidence']]
+        s.confidence = np.array(confidence['confidence'].tolist())
+        #print(s.confidence)
         # Only samples every 'sample_rate' frames, starts at given 'start_frame'
    
     """ Uses cluster definition to print sequence of closest clusters """
@@ -76,25 +81,35 @@ class ClusterConverter:
             seq = s.k_means.predict(s.data) # Run k_means.predict to find closest clusters
         if s.method == 'GMM':
             seq = s.gmm.predict(s.data) # Run gmm.predict to find closest clusters   
-            
+        
+        # Replace low confidence cluster indices with '-1'        
+        seq[s.confidence < 0.9] = -1
+        
         np.set_printoptions(threshold=np.inf) # So it prints whole array, not '...'
         # Predict the closest cluster for the sequence entries and write to file
         with open(outfile, 'w+') as f:
             f.write(str(seq)[1:-1]) #[1:-1] to remove the '[' and ']'
 
-        logging.debug('Cluster Index Sequnce written to: {}'.format(outfile))
+        logging.debug(seq)
+        logging.info('Cluster Index Sequnce written to: {}'.format(outfile))
 
     """ Converts the passed frames from s.data based on s.k_means """
     def convert_seq(s, frames, method='KMeans'):
         
         np.set_printoptions(threshold=np.inf) # So it prints whole array, w/o ...
-        #print(frames[0], frames[1], len(s.data))	    
+        #print(frames[0], frames[1], len(s.data))
+        if frames[0] == -1: frames[0] = 0 # (For dev where first row is 0.00)
         frames_included = s.data.iloc[frames[0]:frames[1]]
         #print(frames_included)
         if method == 'KMeans':
-            return s.k_means.predict(frames_included)
+            seq = s.k_means.predict(frames_included)
         if method == 'GMM':
-            return s.gmm.predict(frames_included)
+            seq = s.gmm.predict(frames_included)
+        
+        # Replace low confidence cluster indices with '-1'
+        seq[s.confidence[frames[0]:frames[1]] < 0.9] = -1
+        
+        return seq
 
     """ Only writes when the cluster has changed """
     def write_cluster_sequence_changes(s, outfile):
@@ -106,6 +121,9 @@ class ClusterConverter:
         if s.method == 'GMM':
             seq = s.gmm.predict(s.data) # Run gmm.predict to find closest clusters
         
+        # Replace low confidence cluster indices with '-1'
+        seq[s.confidence < 0.9] = -1
+        
         # just_changes = Cluster indices only where the cluster changes
         just_changes = []
         last = -1
@@ -114,18 +132,22 @@ class ClusterConverter:
                 just_changes.append(entry)
                 last = entry
         just_changes = np.array(just_changes)
-
+        
         # Write to file
         with open(outfile, 'w+') as f:
             f.write(str(just_changes)[1:-1]) #[1:-1] to remove the '[]'
 
-        logging.debug('Cluster Changes Sequence written to: {}'.format(outfile))
+        logging.debug(just_changes)
+        logging.info('Cluster Changes Sequence written to: {}'.format(outfile))
         
 
     """ Writes the cluster sequence for an answer to its outfile """
     def write_seq(s, seq, outfile):
         with open(outfile, 'w+') as f:
-            f.write(str(seq)[1:-1]) #[1:-1] to remove the '[]'        
+            f.write(str(seq)[1:-1]) #[1:-1] to remove the '[]' 
+        
+        logging.debug(seq)
+        logging.info('Cluster sequences written to: {}'.format(outfile))
             
 #------------------------------------------------------------------------
 # ------------------ End of ClusterConverter class ----------------------
@@ -157,11 +179,11 @@ def convert_all(args, outfolder):
     # Convert all Witness files to cluster sequences
     for name in glob.glob(args.d + '/*'):
         if '-W-' in name: # Only want Witness data
-            t_name = name.split('-W')[0].split('/')[-1] # Transcript name (to find end of baseline)
+            t_name = args.r  + '/' + name.split('-W')[0].split('/')[-1] # Transcript name (to find end of baseline)
             try:
                 start_frame = get_start_frame(t_name) # End of baseline questions
             except IOError:
-                logging.debug('No transcript found - skipping {}'.format(name))
+                logging.error('No transcript found - skipping {}'.format(name))
                 continue
             # Load data at given sample rate, starting at the proper start_frame to exlude baseline
             cluster_converter.load_data_sequence(name, sample_rate=args.s, start_frame=start_frame)
@@ -191,11 +213,13 @@ def convert_with_transcripts(args, outfolder):
 
     for name in glob.glob(args.d + '/*'):
         if '-W-' in name:  # For each witness data file 
-            t_name = name.split('-W')[0].split('/')[-1] # Transcript name
+            t_name = args.r + '/' + name.split('-W')[0].split('/')[-1] # Transcript name
             # Ranges for each question/answer (depending on if inspecting while listening vs. speaking)
             try:
                 ranges = get_ranges(t_name, is_listening=args.t=='listening') # (Excludes baseline phase)
             except IOError:
+                # Some OpenFace files dont have transcripts b/c they had to be omitted from study for 
+                # various reasons
                 logging.debug('No transcript found - skipping {}'.format(name))
                 continue         
             # Data needs to be samples every frame for compatibility with transcript data
@@ -218,7 +242,7 @@ Parses the transcript file to isolate each question, returns a list of
 """
 def get_ranges(t_name, is_listening=True):
     answer_frames = []
-    df = pd.read_csv('transcripts/' + t_name + '.csv', skipinitialspace=True)
+    df = pd.read_csv(t_name + '.csv', header=None, skipinitialspace=True)
     baseline_phase = True
     for i, row in df.iterrows():
         if 'image' in str(row[2]): # End of baseline questions
@@ -241,11 +265,11 @@ def get_ranges(t_name, is_listening=True):
 Finds the frame at the start of the first non-baseline question.
 """
 def get_start_frame(t_name):
-    df = pd.read_csv('transcripts/' + t_name + '.csv', skipinitialspace=True)
+    df = pd.read_csv(t_name + '.csv', header=None, skipinitialspace=True)
     for i, row in df.iterrows():
         if 'image' in str(row[2]):
             return get_frame(row[0])
-    print('ERROR - no start frame found in {}'.format(t_name))
+    logging.error('No start frame found in {}'.format(t_name))
 
 
 #------------------------------------------------------------------------
@@ -269,25 +293,31 @@ if __name__ == '__main__':
     # Command line argument parser - can use -h or --help flags to show usage
     help_intro = 'Program for converting seq datafiles into seqs of cluster indices.' 
     parser = argparse.ArgumentParser(description=help_intro)
-    # -c = ClusterDefinition: Path to cluster definition file (csv)
+    # -c = Cluster Definition: Path to cluster definition file (csv)
     parser.add_argument('-c', type=str, metavar='cluster_def', 
-                help='Cluster definition file, ex:example/face_clusters_AU06_r_AU12_r_4.csv',  
-                default='/public/tsen/clusterResults/km_all_k15_d2/face_clusters_AU06_r_AU12_r_5.csv')
-    # -d = DataFolder: Folder containing raw data files from OpenFace
-    parser.add_argument('-d', metavar='data_file', help='Input OpenFace data folder, ex:example/testData', \
-                        type=str, default='/public/tsen/OpenFace')
+                help='Cluster definition file, ex:output/face_clusters_AU06_r_AU12_r_5.csv',  
+                default='output/face_clusters_AU06_r_AU12_r_5.csv')
+    # -d = Data Folder: Folder containing raw data files from OpenFace
+    parser.add_argument('-d', metavar='data_file', help='Input OpenFace data folder, ex:example/test_input', \
+                        type=str, default='example/test_input')
     # -t = Type: possible options = (default | changes | listening | speaking) 
     parser.add_argument('-t', help='Conversion Type (default|changes|listening|speaking)', 
                         default='default', type=str, metavar='type')
-    # -s = SampleRate: Samples every X frames of the data (raw data is 15 fps)
+    # -s = Sample Rate: Samples every X frames of the data (raw data is 15 fps)
     parser.add_argument('-s', help='Sample Rate, data sampled every X frames', 
                         metavar='sample_rate', type=int, default=1)
+    # -r = Transcripts Folder: Contains CSV of the interview transcripts
+    parser.add_argument('-r', help='Transcripts folder', metavar='transcripts_folder',
+                        type=str, default='example/test_transcripts')
     args = parser.parse_args()
     
+    print('Args:')
+    for arg, val in args.__dict__.items():
+        print(' {} = {}'.format(arg, val))
     
-    # Build outfolder path (ex: cluster_seq/KM_AU06_r_AU12_r_5/default/every_frame)
+    # Build outfolder path (ex: cluster_sequences/KM_AU06_r_AU12_r_5/default/every_frame)
     if 'gmm' in args.c:
-        outfolder = 'cluster_sequences/GMM_' 
+        outfolder = 'cluster_sequences/GMM_'
     else:
         outfolder = 'cluster_sequences/KM_'
     outfolder += args.c.split('.')[0].split('face_clusters_')[1] + '/' + args.t
@@ -298,6 +328,8 @@ if __name__ == '__main__':
             outfolder += '/every_{}_frames'.format(args.s)
     else:
         args.s = 1 # Changes only can't have a sample rate (logically doesn't make sense)
+    if 'example' in args.d: # For dev just use example output folder
+        outfolder = 'example/test_output'
     logging.info('Outfolder = ' + outfolder)
     
     # Set up directories - make them or clean them up if they already exist
@@ -312,4 +344,4 @@ if __name__ == '__main__':
     else:
         convert_all(args, outfolder)
         
-    logging.debug('PROGRAM COMPLETE')
+    logging.info('PROGRAM COMPLETE')
