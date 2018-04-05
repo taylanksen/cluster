@@ -515,7 +515,7 @@ if __name__ == '__main__':
     parser.add_argument('-t', help='type: gmm, km', type=str, 
                         default='km')
     parser.add_argument('-k', help='maximum k', type=int, 
-                        default=14)
+                        default=20)
     
     args = parser.parse_args()
     
