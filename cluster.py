@@ -79,7 +79,7 @@ class ClusterSearch:
         if 'confidence' in s.df.columns:
             s.df = s.df[s.df['confidence'] >= ClusterSearch.CONFIDENCE_TOL]
         else:
-            log.info.warning('No confidence column, using all datapoints')
+            log.warn('No confidence column, using all datapoints')
 
         log.info('...data loaded')
 
@@ -511,7 +511,8 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=help_intro)
 
     parser.add_argument('-i', help='inputs, ex:example/test.csv', type=str, 
-                        default='all_frames.pkl.xz')
+                        #default='all_frames.pkl.xz')
+                        default='desampled_au6_au12_hiconf.csv')
     parser.add_argument('-t', help='type: gmm, km', type=str, 
                         default='km')
     parser.add_argument('-k', help='maximum k', type=int, 
